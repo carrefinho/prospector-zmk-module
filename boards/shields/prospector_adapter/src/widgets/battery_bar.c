@@ -18,11 +18,13 @@ static sys_slist_t widgets = SYS_SLIST_STATIC_INIT(&widgets);
 //     uint8_t index;
 // };
 
-bool initialized = false;
+static bool initialized = false;
 
 struct battery_state {
+#if !IS_ENABLED(CONFIG_PROSPECTOR_MINIMAL)
     bool bat_info;
     bool peripheral_connected;
+#endif
     uint8_t source;
     uint8_t level;
 };
@@ -50,6 +52,7 @@ static void set_battery_bar_value(lv_obj_t *widget, struct battery_state state) 
     }
 }
 
+#if !IS_ENABLED(CONFIG_PROSPECTOR_MINIMAL)
 static void set_battery_bar_connected(lv_obj_t *widget, struct battery_state state) {
     if (initialized) {
         lv_obj_t *info_container = lv_obj_get_child(widget, state.source);
@@ -74,22 +77,33 @@ static void set_battery_bar_connected(lv_obj_t *widget, struct battery_state sta
         }
     }
 }
+#endif
 
 void battery_bar_update_cb(struct battery_state state) {
     struct zmk_widget_battery_bar *widget;
     SYS_SLIST_FOR_EACH_CONTAINER(&widgets, widget, node) {
         // set_battery_bar_value(widget->obj, state);
+#if IS_ENABLED(CONFIG_PROSPECTOR_MINIMAL)
+        set_battery_bar_value(widget->obj, state);
+#else
         if (state.bat_info) {
             set_battery_bar_value(widget->obj, state);
         } else {
             set_battery_bar_connected(widget->obj, state);
         }
+#endif
     }
 }
 
 static struct battery_state battery_bar_get_state(const zmk_event_t *eh) {
     const struct zmk_peripheral_battery_state_changed *bat_ev =
         as_zmk_peripheral_battery_state_changed(eh);
+#if IS_ENABLED(CONFIG_PROSPECTOR_MINIMAL)
+    return (struct battery_state){
+        .source = bat_ev->source,
+        .level = bat_ev->state_of_charge,
+    };
+#else
     if (bat_ev != NULL) {
         return (struct battery_state){
             .bat_info = true,
@@ -107,12 +121,15 @@ static struct battery_state battery_bar_get_state(const zmk_event_t *eh) {
             .level = 0,
         };
     }
+#endif
 }
 
 ZMK_DISPLAY_WIDGET_LISTENER(widget_battery_bar, struct battery_state, battery_bar_update_cb,
                             battery_bar_get_state);
 ZMK_SUBSCRIPTION(widget_battery_bar, zmk_peripheral_battery_state_changed);
+#if !IS_ENABLED(CONFIG_PROSPECTOR_MINIMAL)
 ZMK_SUBSCRIPTION(widget_battery_bar, zmk_split_central_status_changed);
+#endif
 
 int zmk_widget_battery_bar_init(struct zmk_widget_battery_bar *widget, lv_obj_t *parent) {
     widget->obj = lv_obj_create(parent);
@@ -152,7 +169,6 @@ int zmk_widget_battery_bar_init(struct zmk_widget_battery_bar *widget, lv_obj_t 
         lv_obj_set_style_anim_time(bar, 250, 0);
 
         lv_bar_set_value(bar, 0, LV_ANIM_OFF);
-        lv_obj_set_style_opa(bar, 0, LV_PART_MAIN);
         lv_obj_set_style_opa(bar, 255, LV_PART_INDICATOR);
 
         lv_obj_t *num = lv_label_create(info_container);
@@ -160,8 +176,11 @@ int zmk_widget_battery_bar_init(struct zmk_widget_battery_bar *widget, lv_obj_t 
         lv_obj_set_style_text_color(num, lv_color_white(), 0);
         lv_obj_set_style_opa(num, 255, 0);
         lv_obj_align(num, LV_ALIGN_CENTER, 0, 0);
-        lv_label_set_text(num, "N/A");
+        lv_label_set_text(num, "0");
 
+
+#if !IS_ENABLED(CONFIG_PROSPECTOR_MINIMAL)
+        lv_obj_set_style_opa(bar, 0, LV_PART_MAIN);
         lv_obj_set_style_opa(num, 0, 0);
 
         lv_obj_t *nc_bar = lv_obj_create(info_container);
@@ -176,6 +195,7 @@ int zmk_widget_battery_bar_init(struct zmk_widget_battery_bar *widget, lv_obj_t 
         lv_obj_align(nc_num, LV_ALIGN_CENTER, 0, 0);
         lv_label_set_text(nc_num, LV_SYMBOL_CLOSE);
         lv_obj_set_style_opa(nc_num, 255, 0);
+#endif
     }
 
     sys_slist_append(&widgets, &widget->node);

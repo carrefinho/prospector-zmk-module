@@ -15,12 +15,16 @@ static char layer_names_buffer[256] = {0}; // Buffer for concatenated layer name
 
 static sys_slist_t widgets = SYS_SLIST_STATIC_INIT(&widgets);
 
+static bool initialized = false;
+
 struct layer_roller_state {
     uint8_t index;
 };
 
 static void layer_roller_set_sel(lv_obj_t *roller, struct layer_roller_state state) {
-    lv_roller_set_selected(roller, state.index, LV_ANIM_ON);
+    if (initialized) {
+        lv_roller_set_selected(roller, state.index, LV_ANIM_ON);
+    }
 }
 
 static void layer_roller_update_cb(struct layer_roller_state state) {
@@ -180,6 +184,8 @@ int zmk_widget_layer_roller_init(struct zmk_widget_layer_roller *widget, lv_obj_
     sys_slist_append(&widgets, &widget->node);
 
     widget_layer_roller_init();
+    initialized = true;
+
     return 0;
 }
 

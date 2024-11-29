@@ -12,15 +12,19 @@ LOG_MODULE_DECLARE(zmk, CONFIG_ZMK_LOG_LEVEL);
 
 static sys_slist_t widgets = SYS_SLIST_STATIC_INIT(&widgets);
 
+static bool initialized = false;
+
 struct caps_word_indicator_state {
     bool active;
 };
 
 static void caps_word_indicator_set_active(lv_obj_t *label, struct caps_word_indicator_state state) {
-    if (state.active) {
-        lv_obj_set_style_text_color(label, lv_color_hex(0x00ffe5), LV_PART_MAIN);
-    } else {
-        lv_obj_set_style_text_color(label, lv_color_hex(0x202020), LV_PART_MAIN);
+    if (initialized) {
+        if (state.active) {
+            lv_obj_set_style_text_color(label, lv_color_hex(0x00ffe5), LV_PART_MAIN);
+        } else {
+            lv_obj_set_style_text_color(label, lv_color_hex(0x202020), LV_PART_MAIN);
+        }
     }
 }
 
@@ -58,6 +62,9 @@ int zmk_widget_caps_word_indicator_init(struct zmk_widget_caps_word_indicator *w
     sys_slist_append(&widgets, &widget->node);
 
     widget_caps_word_indicator_init();
+
+    initialized = true;
+
     return 0;
 }
 
