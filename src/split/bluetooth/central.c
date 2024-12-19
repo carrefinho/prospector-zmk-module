@@ -30,7 +30,9 @@ LOG_MODULE_DECLARE(zmk, CONFIG_ZMK_LOG_LEVEL);
 #include <zmk/events/position_state_changed.h>
 #include <zmk/events/sensor_event.h>
 #include <zmk/events/battery_state_changed.h>
+#include <zmk/pointing/input_split.h>
 #include <zmk/hid_indicators_types.h>
+#include <zmk/physical_layouts.h>
 
 static int start_scanning(void);
 
@@ -57,9 +59,75 @@ struct peripheral_slot {
 #if IS_ENABLED(CONFIG_ZMK_SPLIT_PERIPHERAL_HID_INDICATORS)
     uint16_t update_hid_indicators;
 #endif // IS_ENABLED(CONFIG_ZMK_SPLIT_PERIPHERAL_HID_INDICATORS)
+    uint16_t selected_physical_layout_handle;
     uint8_t position_state[POSITION_STATE_DATA_LEN];
     uint8_t changed_positions[POSITION_STATE_DATA_LEN];
 };
+
+#if IS_ENABLED(CONFIG_ZMK_INPUT_SPLIT)
+
+static const struct bt_uuid *gatt_ccc_uuid = BT_UUID_GATT_CCC;
+static const struct bt_uuid *gatt_cpf_uuid = BT_UUID_GATT_CPF;
+
+struct peripheral_input_slot {
+    struct bt_conn *conn;
+    struct bt_gatt_subscribe_params sub;
+    uint8_t reg;
+};
+
+#define COUNT_INPUT_SPLIT(n) +1
+
+static struct peripheral_input_slot
+    peripheral_input_slots[(0 DT_FOREACH_STATUS_OKAY(zmk_input_split, COUNT_INPUT_SPLIT))];
+
+static bool input_slot_is_open(size_t i) {
+    return i < ARRAY_SIZE(peripheral_input_slots) && peripheral_input_slots[i].conn == NULL;
+}
+
+static bool input_slot_is_pending(size_t i) {
+    return i < ARRAY_SIZE(peripheral_input_slots) && peripheral_input_slots[i].conn != NULL &&
+           (!peripheral_input_slots[i].sub.value_handle ||
+            !peripheral_input_slots[i].sub.ccc_handle || !peripheral_input_slots[i].reg);
+}
+
+static int reserve_next_open_input_slot(struct peripheral_input_slot **slot, struct bt_conn *conn) {
+    for (size_t i = 0; i < ARRAY_SIZE(peripheral_input_slots); i++) {
+        if (input_slot_is_open(i)) {
+            peripheral_input_slots[i].conn = conn;
+
+            // Clear out any previously set values
+            peripheral_input_slots[i].sub.value_handle = 0;
+            peripheral_input_slots[i].sub.ccc_handle = 0;
+            peripheral_input_slots[i].reg = 0;
+            *slot = &peripheral_input_slots[i];
+            return i;
+        }
+    }
+
+    return -ENOMEM;
+}
+
+static int find_pending_input_slot(struct peripheral_input_slot **slot, struct bt_conn *conn) {
+    for (size_t i = 0; i < ARRAY_SIZE(peripheral_input_slots); i++) {
+        if (peripheral_input_slots[i].conn == conn && input_slot_is_pending(i)) {
+            *slot = &peripheral_input_slots[i];
+            return i;
+        }
+    }
+
+    return -ENODEV;
+}
+
+void release_peripheral_input_subs(struct bt_conn *conn) {
+    for (size_t i = 0; i < ARRAY_SIZE(peripheral_input_slots); i++) {
+        if (peripheral_input_slots[i].conn == conn) {
+            peripheral_input_slots[i].conn = NULL;
+            // memset(&peripheral_input_slots[i], 0, sizeof(struct peripheral_input_slot));
+        }
+    }
+}
+
+#endif // IS_ENABLED(CONFIG_ZMK_INPUT_SPLIT)
 
 static struct peripheral_slot peripherals[ZMK_SPLIT_BLE_PERIPHERAL_COUNT];
 
@@ -142,6 +210,7 @@ int release_peripheral_slot(int index) {
     // Clean up previously discovered handles;
     slot->subscribe_params.value_handle = 0;
     slot->run_behavior_handle = 0;
+    slot->selected_physical_layout_handle = 0;
 #if IS_ENABLED(CONFIG_ZMK_SPLIT_PERIPHERAL_HID_INDICATORS)
     slot->update_hid_indicators = 0;
 #endif // IS_ENABLED(CONFIG_ZMK_SPLIT_PERIPHERAL_HID_INDICATORS)
@@ -228,6 +297,65 @@ static uint8_t split_central_sensor_notify_func(struct bt_conn *conn,
 }
 #endif /* ZMK_KEYMAP_HAS_SENSORS */
 
+#if IS_ENABLED(CONFIG_ZMK_INPUT_SPLIT)
+
+struct zmk_input_event_msg {
+    uint8_t reg;
+    struct zmk_split_input_event_payload payload;
+};
+
+K_MSGQ_DEFINE(peripheral_input_event_msgq, sizeof(struct zmk_input_event_msg), 5, 4);
+//   CONFIG_ZMK_SPLIT_BLE_CENTRAL_INPUT_QUEUE_SIZE, 4);
+
+void peripheral_input_event_work_callback(struct k_work *work) {
+    struct zmk_input_event_msg msg;
+    while (k_msgq_get(&peripheral_input_event_msgq, &msg, K_NO_WAIT) == 0) {
+        int ret = zmk_input_split_report_peripheral_event(
+            msg.reg, msg.payload.type, msg.payload.code, msg.payload.value, msg.payload.sync);
+        if (ret < 0) {
+            LOG_WRN("Failed to report peripheral event %d", ret);
+        }
+    }
+}
+
+K_WORK_DEFINE(input_event_work, peripheral_input_event_work_callback);
+
+static uint8_t peripheral_input_event_notify_cb(struct bt_conn *conn,
+                                                struct bt_gatt_subscribe_params *params,
+                                                const void *data, uint16_t length) {
+    if (!data) {
+        LOG_DBG("[UNSUBSCRIBED]");
+        params->value_handle = 0U;
+        return BT_GATT_ITER_STOP;
+    }
+
+    LOG_DBG("[INPUT EVENT] data %p length %u", data, length);
+
+    if (length != sizeof(struct zmk_split_input_event_payload)) {
+        LOG_WRN("Ignoring input event notify with incorrect data length (%d)", length);
+        return BT_GATT_ITER_STOP;
+    }
+
+    struct zmk_input_event_msg msg;
+
+    memcpy(&msg.payload, data, MIN(length, sizeof(struct zmk_split_input_event_payload)));
+
+    LOG_DBG("Got an input event with type %d, code %d, value %d, sync %d", msg.payload.type,
+            msg.payload.code, msg.payload.value, msg.payload.sync);
+
+    for (size_t i = 0; i < ARRAY_SIZE(peripheral_input_slots); i++) {
+        if (&peripheral_input_slots[i].sub == params) {
+            msg.reg = peripheral_input_slots[i].reg;
+            k_msgq_put(&peripheral_input_event_msgq, &msg, K_NO_WAIT);
+            k_work_submit(&input_event_work);
+        }
+    }
+
+    return BT_GATT_ITER_CONTINUE;
+}
+
+#endif
+
 static uint8_t split_central_notify_func(struct bt_conn *conn,
                                          struct bt_gatt_subscribe_params *params, const void *data,
                                          uint16_t length) {
@@ -249,7 +377,7 @@ static uint8_t split_central_notify_func(struct bt_conn *conn,
     for (int i = 0; i < POSITION_STATE_DATA_LEN; i++) {
         slot->changed_positions[i] = ((uint8_t *)data)[i] ^ slot->position_state[i];
         slot->position_state[i] = ((uint8_t *)data)[i];
-        // LOG_DBG("data: %d", slot->position_state[i]);
+        LOG_DBG("data: %d", slot->position_state[i]);
     }
 
     for (int i = 0; i < POSITION_STATE_DATA_LEN; i++) {
@@ -377,6 +505,7 @@ static uint8_t split_central_battery_level_read_func(struct bt_conn *conn, uint8
 #endif /* IS_ENABLED(CONFIG_ZMK_SPLIT_BLE_CENTRAL_BATTERY_LEVEL_FETCHING) */
 
 static int split_central_subscribe(struct bt_conn *conn, struct bt_gatt_subscribe_params *params) {
+    atomic_set(params->flags, BT_GATT_SUBSCRIBE_FLAG_NO_RESUB);
     int err = bt_gatt_subscribe(conn, params);
     switch (err) {
     case -EALREADY:
@@ -392,6 +521,46 @@ static int split_central_subscribe(struct bt_conn *conn, struct bt_gatt_subscrib
 
     return err;
 }
+
+static int update_peripheral_selected_layout(struct peripheral_slot *slot, uint8_t layout_idx) {
+    if (slot->state != PERIPHERAL_SLOT_STATE_CONNECTED) {
+        return -ENOTCONN;
+    }
+
+    if (slot->selected_physical_layout_handle == 0) {
+        // It appears that sometimes the peripheral is considered connected
+        // before the GATT characteristics have been discovered. If this is
+        // the case, the selected_physical_layout_handle will not yet be set.
+        return -EAGAIN;
+    }
+
+    if (bt_conn_get_security(slot->conn) < BT_SECURITY_L2) {
+        return -EAGAIN;
+    }
+
+    int err = bt_gatt_write_without_response(slot->conn, slot->selected_physical_layout_handle,
+                                             &layout_idx, sizeof(layout_idx), true);
+
+    if (err < 0) {
+        LOG_ERR("Failed to write physical layout index to peripheral (err %d)", err);
+    }
+
+    return err;
+}
+
+static void update_peripherals_selected_physical_layout(struct k_work *_work) {
+    uint8_t layout_idx = zmk_physical_layouts_get_selected();
+    for (int i = 0; i < ZMK_SPLIT_BLE_PERIPHERAL_COUNT; i++) {
+        if (peripherals[i].state != PERIPHERAL_SLOT_STATE_CONNECTED) {
+            continue;
+        }
+
+        update_peripheral_selected_layout(&peripherals[i], layout_idx);
+    }
+}
+
+K_WORK_DEFINE(update_peripherals_selected_layouts_work,
+              update_peripherals_selected_physical_layout);
 
 static uint8_t split_central_chrc_discovery_func(struct bt_conn *conn,
                                                  const struct bt_gatt_attr *attr,
@@ -412,10 +581,13 @@ static uint8_t split_central_chrc_discovery_func(struct bt_conn *conn,
         return BT_GATT_ITER_STOP;
     }
 
-    // LOG_DBG("[ATTRIBUTE] handle %u", attr->handle);
+    LOG_DBG("[ATTRIBUTE] handle %u", attr->handle);
+    switch (params->type) {
+    case BT_GATT_DISCOVER_CHARACTERISTIC:
     const struct bt_uuid *chrc_uuid = ((struct bt_gatt_chrc *)attr->user_data)->uuid;
 
-    if (bt_uuid_cmp(chrc_uuid, BT_UUID_DECLARE_128(ZMK_SPLIT_BT_CHAR_POSITION_STATE_UUID)) == 0) {
+        if (bt_uuid_cmp(chrc_uuid, BT_UUID_DECLARE_128(ZMK_SPLIT_BT_CHAR_POSITION_STATE_UUID)) ==
+            0) {
         LOG_DBG("Found position state characteristic");
         slot->subscribe_params.disc_params = &slot->sub_discover_params;
         slot->subscribe_params.end_handle = slot->discover_params.end_handle;
@@ -424,8 +596,8 @@ static uint8_t split_central_chrc_discovery_func(struct bt_conn *conn,
         slot->subscribe_params.value = BT_GATT_CCC_NOTIFY;
         split_central_subscribe(conn, &slot->subscribe_params);
 #if ZMK_KEYMAP_HAS_SENSORS
-    } else if (bt_uuid_cmp(chrc_uuid, BT_UUID_DECLARE_128(ZMK_SPLIT_BT_CHAR_SENSOR_STATE_UUID)) ==
-               0) {
+        } else if (bt_uuid_cmp(chrc_uuid,
+                               BT_UUID_DECLARE_128(ZMK_SPLIT_BT_CHAR_SENSOR_STATE_UUID)) == 0) {
         slot->discover_params.uuid = NULL;
         slot->discover_params.start_handle = attr->handle + 2;
         slot->discover_params.type = BT_GATT_DISCOVER_CHARACTERISTIC;
@@ -437,12 +609,38 @@ static uint8_t split_central_chrc_discovery_func(struct bt_conn *conn,
         slot->sensor_subscribe_params.value = BT_GATT_CCC_NOTIFY;
         split_central_subscribe(conn, &slot->sensor_subscribe_params);
 #endif /* ZMK_KEYMAP_HAS_SENSORS */
-    } else if (bt_uuid_cmp(chrc_uuid, BT_UUID_DECLARE_128(ZMK_SPLIT_BT_CHAR_RUN_BEHAVIOR_UUID)) ==
-               0) {
+#if IS_ENABLED(CONFIG_ZMK_INPUT_SPLIT)
+        } else if (bt_uuid_cmp(chrc_uuid, BT_UUID_DECLARE_128(ZMK_SPLIT_BT_INPUT_EVENT_UUID)) ==
+                   0) {
+            LOG_DBG("Found an input characteristic");
+            struct peripheral_input_slot *input_slot;
+            int ret = reserve_next_open_input_slot(&input_slot, conn);
+            if (ret < 0) {
+                LOG_WRN("No available slot for peripheral input subscriptions (%d)", ret);
+
+                slot->discover_params.uuid = NULL;
+                slot->discover_params.start_handle = attr->handle + 1;
+                slot->discover_params.type = BT_GATT_DISCOVER_CHARACTERISTIC;
+            } else {
+                LOG_DBG("Reserved a slot for the input subscription");
+                input_slot->sub.value_handle = bt_gatt_attr_value_handle(attr);
+
+                slot->discover_params.uuid = gatt_ccc_uuid;
+                slot->discover_params.start_handle = attr->handle;
+                slot->discover_params.type = BT_GATT_DISCOVER_STD_CHAR_DESC;
+            }
+#endif // IS_ENABLED(CONFIG_ZMK_INPUT_SPLIT)
+        } else if (bt_uuid_cmp(chrc_uuid,
+                               BT_UUID_DECLARE_128(ZMK_SPLIT_BT_CHAR_RUN_BEHAVIOR_UUID)) == 0) {
         LOG_DBG("Found run behavior handle");
         slot->discover_params.uuid = NULL;
         slot->discover_params.start_handle = attr->handle + 2;
         slot->run_behavior_handle = bt_gatt_attr_value_handle(attr);
+        } else if (!bt_uuid_cmp(((struct bt_gatt_chrc *)attr->user_data)->uuid,
+                                BT_UUID_DECLARE_128(ZMK_SPLIT_BT_SELECT_PHYS_LAYOUT_UUID))) {
+            LOG_DBG("Found select physical layout handle");
+            slot->selected_physical_layout_handle = bt_gatt_attr_value_handle(attr);
+            k_work_submit(&update_peripherals_selected_layouts_work);
 #if IS_ENABLED(CONFIG_ZMK_SPLIT_PERIPHERAL_HID_INDICATORS)
     } else if (!bt_uuid_cmp(((struct bt_gatt_chrc *)attr->user_data)->uuid,
                             BT_UUID_DECLARE_128(ZMK_SPLIT_BT_UPDATE_HID_INDICATORS_UUID))) {
@@ -467,8 +665,54 @@ static uint8_t split_central_chrc_discovery_func(struct bt_conn *conn,
         bt_gatt_read(conn, &slot->batt_lvl_read_params);
 #endif /* IS_ENABLED(CONFIG_ZMK_SPLIT_BLE_CENTRAL_BATTERY_LEVEL_FETCHING) */
     }
+        break;
+    case BT_GATT_DISCOVER_STD_CHAR_DESC:
+#if IS_ENABLED(CONFIG_ZMK_INPUT_SPLIT)
+        if (bt_uuid_cmp(slot->discover_params.uuid, BT_UUID_GATT_CCC) == 0) {
+            LOG_DBG("Found input CCC descriptor");
+            struct peripheral_input_slot *input_slot;
+            int ret = find_pending_input_slot(&input_slot, conn);
+            if (ret < 0) {
+                LOG_DBG("No pending input slot (%d)", ret);
+                slot->discover_params.uuid = NULL;
+                slot->discover_params.start_handle = attr->handle + 1;
+                slot->discover_params.type = BT_GATT_DISCOVER_CHARACTERISTIC;
+            } else {
+                LOG_DBG("Found pending input slot");
+                input_slot->sub.ccc_handle = attr->handle;
 
-    bool subscribed = slot->run_behavior_handle && slot->subscribe_params.value_handle;
+                slot->discover_params.uuid = gatt_cpf_uuid;
+                slot->discover_params.start_handle = attr->handle + 1;
+                slot->discover_params.type = BT_GATT_DISCOVER_STD_CHAR_DESC;
+            }
+        } else if (bt_uuid_cmp(slot->discover_params.uuid, BT_UUID_GATT_CPF) == 0) {
+            LOG_DBG("Found input CPF descriptor");
+            struct bt_gatt_cpf *cpf = attr->user_data;
+            struct peripheral_input_slot *input_slot;
+            int ret = find_pending_input_slot(&input_slot, conn);
+            if (ret < 0) {
+                LOG_DBG("No pending input slot (%d)", ret);
+            } else {
+                LOG_DBG("Found pending input slot");
+                input_slot->reg = cpf->description;
+                input_slot->sub.notify = peripheral_input_event_notify_cb;
+                input_slot->sub.value = BT_GATT_CCC_NOTIFY;
+                int err = split_central_subscribe(conn, &input_slot->sub);
+                if (err < 0) {
+                    LOG_WRN("Failed to subscribe to input notifications %d", err);
+                }
+            }
+
+            slot->discover_params.uuid = NULL;
+            slot->discover_params.start_handle = attr->handle + 1;
+            slot->discover_params.type = BT_GATT_DISCOVER_CHARACTERISTIC;
+        }
+#endif // IS_ENABLED(CONFIG_ZMK_INPUT_SPLIT)
+        break;
+    }
+
+    bool subscribed = slot->run_behavior_handle && slot->subscribe_params.value_handle &&
+                      slot->selected_physical_layout_handle;
 
 #if ZMK_KEYMAP_HAS_SENSORS
     subscribed = subscribed && slot->sensor_subscribe_params.value_handle;
@@ -480,6 +724,14 @@ static uint8_t split_central_chrc_discovery_func(struct bt_conn *conn,
 #if IS_ENABLED(CONFIG_ZMK_SPLIT_BLE_CENTRAL_BATTERY_LEVEL_FETCHING)
     subscribed = subscribed && slot->batt_lvl_subscribe_params.value_handle;
 #endif /* IS_ENABLED(CONFIG_ZMK_SPLIT_BLE_CENTRAL_BATTERY_LEVEL_FETCHING) */
+#if IS_ENABLED(CONFIG_ZMK_INPUT_SPLIT)
+    for (size_t i = 0; i < ARRAY_SIZE(peripheral_input_slots); i++) {
+        if (input_slot_is_open(i) || input_slot_is_pending(i)) {
+            subscribed = false;
+            break;
+        }
+    }
+#endif // IS_ENABLED(CONFIG_ZMK_INPUT_SPLIT)
 
     return subscribed ? BT_GATT_ITER_STOP : BT_GATT_ITER_CONTINUE;
 }
@@ -551,7 +803,6 @@ static void split_central_process_connection(struct bt_conn *conn) {
     LOG_DBG("New connection params: Interval: %d, Latency: %d, PHY: %d", info.le.interval,
             info.le.latency, info.le.phy->rx_phy);
 
-    LOG_DBG("***** OMG OMG PERIPHERAL CONNECTED SLOT NUMBA: %d", peripheral_slot_index_for_conn(conn));
     raise_zmk_split_central_status_changed((struct zmk_split_central_status_changed){
         .slot = peripheral_slot_index_for_conn(conn),
         .connected = true,
@@ -610,7 +861,7 @@ static bool split_central_eir_parse(struct bt_data *data, void *user_data) {
     bt_addr_le_t *addr = user_data;
     int i;
 
-    // LOG_DBG("[AD]: %u data_len %u", data->type, data->data_len);
+    LOG_DBG("[AD]: %u data_len %u", data->type, data->data_len);
 
     switch (data->type) {
     case BT_DATA_UUID128_SOME:
@@ -651,7 +902,7 @@ static void split_central_device_found(const bt_addr_le_t *addr, int8_t rssi, ui
     char dev[BT_ADDR_LE_STR_LEN];
 
     bt_addr_le_to_str(addr, dev, sizeof(dev));
-    // LOG_DBG("[DEVICE]: %s, AD evt type %u, AD data len %u, RSSI %i", dev, type, ad->len, rssi);
+    LOG_DBG("[DEVICE]: %s, AD evt type %u, AD data len %u, RSSI %i", dev, type, ad->len, rssi);
 
     /* We're only interested in connectable events */
     if (type == BT_GAP_ADV_TYPE_ADV_IND) {
@@ -729,7 +980,6 @@ static void split_central_disconnected(struct bt_conn *conn, uint8_t reason) {
 
     LOG_DBG("Disconnected: %s (reason %d)", addr, reason);
 
-    LOG_DBG("***** SADGE PERIPHERAL DISCONNECTED SLOT NUMBA: %d", peripheral_slot_index_for_conn(conn));
     raise_zmk_split_central_status_changed((struct zmk_split_central_status_changed){
         .slot = peripheral_slot_index_for_conn(conn),
         .connected = false,
@@ -744,6 +994,10 @@ static void split_central_disconnected(struct bt_conn *conn, uint8_t reason) {
     k_work_submit(&peripheral_batt_lvl_work);
 #endif // IS_ENABLED(CONFIG_ZMK_SPLIT_BLE_CENTRAL_BATTERY_LEVEL_FETCHING)
 
+#if IS_ENABLED(CONFIG_ZMK_INPUT_SPLIT)
+    release_peripheral_input_subs(conn);
+#endif
+
     err = release_peripheral_slot_for_conn(conn);
 
     if (err < 0) {
@@ -753,9 +1007,30 @@ static void split_central_disconnected(struct bt_conn *conn, uint8_t reason) {
     start_scanning();
 }
 
+static void split_central_security_changed(struct bt_conn *conn, bt_security_t level,
+                                           enum bt_security_err err) {
+    struct peripheral_slot *slot = peripheral_slot_for_conn(conn);
+    if (!slot || !slot->selected_physical_layout_handle) {
+        return;
+    }
+
+    if (err > 0) {
+        LOG_DBG("Skipping updating the physical layout for peripheral with security error");
+        return;
+    }
+
+    if (level < BT_SECURITY_L2) {
+        LOG_DBG("Skipping updating the physical layout for peripheral with insufficient security");
+        return;
+    }
+
+    k_work_submit(&update_peripherals_selected_layouts_work);
+}
+
 static struct bt_conn_cb conn_callbacks = {
     .connected = split_central_connected,
     .disconnected = split_central_disconnected,
+    .security_changed = split_central_security_changed,
 };
 
 K_THREAD_STACK_DEFINE(split_central_split_run_q_stack,
@@ -830,6 +1105,7 @@ int zmk_split_bt_invoke_behavior(uint8_t source, struct zmk_behavior_binding *bi
                                                          .param1 = binding->param1,
                                                          .param2 = binding->param2,
                                                          .position = event.position,
+                                                         .source = event.source,
                                                          .state = state ? 1 : 0,
                                                      }};
     const size_t payload_dev_size = sizeof(payload.behavior_dev);
@@ -911,3 +1187,13 @@ static int zmk_split_bt_central_init(void) {
 }
 
 SYS_INIT(zmk_split_bt_central_init, APPLICATION, CONFIG_ZMK_BLE_INIT_PRIORITY);
+
+static int zmk_split_bt_central_listener_cb(const zmk_event_t *eh) {
+    if (as_zmk_physical_layout_selection_changed(eh)) {
+        k_work_submit(&update_peripherals_selected_layouts_work);
+    }
+    return ZMK_EV_EVENT_BUBBLE;
+}
+
+ZMK_LISTENER(zmk_split_bt_central, zmk_split_bt_central_listener_cb);
+ZMK_SUBSCRIPTION(zmk_split_bt_central, zmk_physical_layout_selection_changed);
