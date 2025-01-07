@@ -8,14 +8,14 @@
 
 &arduino_spi {
    status = "okay";
-   cs-gpios = <&arduino_header 16 GPIO_ACTIVE_LOW>;
+   cs-gpios = <&gpio1 12 GPIO_ACTIVE_LOW>;
 
    st7789: st7789v@0 {
       compatible = "sitronix,st7789v";
       spi-max-frequency = <31000000>;
       reg = <0>;
-      cmd-data-gpios = <&arduino_header 15 GPIO_ACTIVE_LOW>;
-      reset-gpios = <&arduino_header 14 GPIO_ACTIVE_LOW>;
+      cmd-data-gpios = <&gpio1 7 GPIO_ACTIVE_LOW>;
+      reset-gpios = <&gpio1 8 GPIO_ACTIVE_LOW>;
       width = <170>;
       height = <320>;
       x-offset = <35>;
@@ -52,14 +52,14 @@
 &pinctrl {
    pwm1_default: pwm1_default {
      group1 {
-        psels = <NRF_PSEL(PWM_OUT0, 1, 3)>;
+        psels = <NRF_PSEL(PWM_OUT0, 1, 6)>;
         nordic,invert;
      };
   };
 
   pwm1_sleep: pwm1_sleep {
      group1 {
-        psels = <NRF_PSEL(PWM_OUT0, 1, 3)>;
+        psels = <NRF_PSEL(PWM_OUT0, 1, 6)>;
         low-power-enable;
      };
   };
