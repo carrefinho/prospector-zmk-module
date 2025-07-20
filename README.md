@@ -11,7 +11,7 @@ All the necessary stuff for [Prospector](https://github.com/carrefinho/prospecto
 
 ## Installation
 
-Your ZMK keyboard should be set up with a dongle as central.
+Your ZMK keyboard should be [set up with a dongle](https://zmk.dev/docs/development/hardware-integration/dongle#adding-a-dongle) as central.
 
 Add this module to your `config/west.yml` with these new entries under `remotes` and `projects`:
 
