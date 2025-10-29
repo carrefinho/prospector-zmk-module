@@ -9,14 +9,8 @@
 
 #include <fonts.h>
 
-#include <zephyr/logging/log.h>
-LOG_MODULE_DECLARE(zmk, CONFIG_ZMK_LOG_LEVEL);
-
 static sys_slist_t widgets = SYS_SLIST_STATIC_INIT(&widgets);
 
-bool initialized = false;
-
-// Simplified state structures for each event type
 struct battery_update_state {
     uint8_t source;
     uint8_t level;
@@ -27,69 +21,92 @@ struct connection_update_state {
     bool connected;
 };
 
-static void set_battery_bar_value(lv_obj_t *widget, struct battery_update_state state) {
-    if (initialized) {
-        lv_obj_t *info_container = lv_obj_get_child(widget, state.source);
-        lv_obj_t *bar = lv_obj_get_child(info_container, 0);
-        lv_obj_t *num = lv_obj_get_child(info_container, 1);
+static void set_battery_bar_value(lv_obj_t *widget_obj, struct battery_update_state state, bool is_initialized) {
+    if (!is_initialized || state.source >= ZMK_SPLIT_BLE_PERIPHERAL_COUNT) {
+        return;
+    }
 
-        lv_bar_set_value(bar, state.level, LV_ANIM_ON);
-        lv_label_set_text_fmt(num, "%d", state.level);
+    lv_obj_t *info_container = lv_obj_get_child(widget_obj, state.source);
+    if (!info_container) {
+        return;
+    }
 
-        if (state.level < 20) {
-            lv_obj_set_style_bg_color(bar, lv_color_hex(0xD3900F), LV_PART_INDICATOR);
-            lv_obj_set_style_bg_grad_color(bar, lv_color_hex(0xE8AC11), LV_PART_INDICATOR);
-            lv_obj_set_style_bg_color(bar, lv_color_hex(0x6E4E07), LV_PART_MAIN);
-            lv_obj_set_style_text_color(num, lv_color_hex(0xFFB802), 0);
-        } else {
-            lv_obj_set_style_bg_color(bar, lv_color_hex(0x909090), LV_PART_INDICATOR);
-            lv_obj_set_style_bg_grad_color(bar, lv_color_hex(0xf0f0f0), LV_PART_INDICATOR);
-            lv_obj_set_style_bg_color(bar, lv_color_hex(0x202020), LV_PART_MAIN);
-            lv_obj_set_style_text_color(num, lv_color_hex(0xFFFFFF), 0);
-        }
+    lv_obj_t *bar = lv_obj_get_child(info_container, 0);
+    lv_obj_t *num = lv_obj_get_child(info_container, 1);
+    if (!bar || !num) {
+        return;
+    }
+
+    lv_bar_set_value(bar, state.level, LV_ANIM_ON);
+    lv_label_set_text_fmt(num, "%d", state.level);
+
+    if (state.level < 20) {
+        lv_obj_set_style_bg_color(bar, lv_color_hex(0xD3900F), LV_PART_INDICATOR);
+        lv_obj_set_style_bg_grad_color(bar, lv_color_hex(0xE8AC11), LV_PART_INDICATOR);
+        lv_obj_set_style_bg_color(bar, lv_color_hex(0x6E4E07), LV_PART_MAIN);
+        lv_obj_set_style_text_color(num, lv_color_hex(0xFFB802), 0);
+    } else {
+        lv_obj_set_style_bg_color(bar, lv_color_hex(0x909090), LV_PART_INDICATOR);
+        lv_obj_set_style_bg_grad_color(bar, lv_color_hex(0xf0f0f0), LV_PART_INDICATOR);
+        lv_obj_set_style_bg_color(bar, lv_color_hex(0x202020), LV_PART_MAIN);
+        lv_obj_set_style_text_color(num, lv_color_hex(0xFFFFFF), 0);
     }
 }
 
-static void set_battery_bar_connected(lv_obj_t *widget, struct connection_update_state state) {
-    if (initialized) {
-        lv_obj_t *info_container = lv_obj_get_child(widget, state.source);
-        lv_obj_t *bar = lv_obj_get_child(info_container, 0);
-        lv_obj_t *num = lv_obj_get_child(info_container, 1);
-        lv_obj_t *nc_bar = lv_obj_get_child(info_container, 2);
-        lv_obj_t *nc_num = lv_obj_get_child(info_container, 3);
+static void set_battery_bar_connected(lv_obj_t *widget_obj, struct connection_update_state state, bool is_initialized) {
+    if (!is_initialized || state.source >= ZMK_SPLIT_BLE_PERIPHERAL_COUNT) {
+        return;
+    }
 
-        LOG_DBG("Peripheral %d %s", state.source,
-                state.connected ? "connected" : "disconnected");
+    lv_obj_t *info_container = lv_obj_get_child(widget_obj, state.source);
+    if (!info_container) {
+        return;
+    }
 
-        if (state.connected) {
-            lv_obj_fade_out(nc_bar, 150, 0);
-            lv_obj_fade_out(nc_num, 150, 0);
-            lv_obj_fade_in(bar, 150, 250);
-            lv_obj_fade_in(num, 150, 250);
-        } else {
-            lv_obj_fade_out(bar, 150, 0);
-            lv_obj_fade_out(num, 150, 0);
-            lv_obj_fade_in(nc_bar, 150, 250);
-            lv_obj_fade_in(nc_num, 150, 250);
-        }
+    lv_obj_t *bar = lv_obj_get_child(info_container, 0);
+    lv_obj_t *num = lv_obj_get_child(info_container, 1);
+    lv_obj_t *nc_bar = lv_obj_get_child(info_container, 2);
+    lv_obj_t *nc_num = lv_obj_get_child(info_container, 3);
+    if (!bar || !num || !nc_bar || !nc_num) {
+        return;
+    }
+
+    // Prevent animation stacking on rapid connection changes
+    lv_anim_del(bar, NULL);
+    lv_anim_del(num, NULL);
+    lv_anim_del(nc_bar, NULL);
+    lv_anim_del(nc_num, NULL);
+
+    if (state.connected) {
+        lv_obj_fade_out(nc_bar, 150, 0);
+        lv_obj_fade_out(nc_num, 150, 0);
+        lv_obj_fade_in(bar, 150, 250);
+        lv_obj_fade_in(num, 150, 250);
+    } else {
+        lv_obj_fade_out(bar, 150, 0);
+        lv_obj_fade_out(num, 150, 0);
+        lv_obj_fade_in(nc_bar, 150, 250);
+        lv_obj_fade_in(nc_num, 150, 250);
     }
 }
 
-// Battery event handling
 void battery_bar_battery_update_cb(struct battery_update_state state) {
-    LOG_DBG("Battery update: source=%d, level=%d", state.source, state.level);
-
     struct zmk_widget_battery_bar *widget;
     SYS_SLIST_FOR_EACH_CONTAINER(&widgets, widget, node) {
-        set_battery_bar_value(widget->obj, state);
+        set_battery_bar_value(widget->obj, state, widget->initialized);
     }
 }
 
 static struct battery_update_state battery_bar_get_battery_state(const zmk_event_t *eh) {
+    if (eh == NULL) {
+        return (struct battery_update_state){.source = 0, .level = 0};
+    }
+
     const struct zmk_peripheral_battery_state_changed *bat_ev =
         as_zmk_peripheral_battery_state_changed(eh);
-
-    LOG_DBG("Received battery event: source=%d, level=%d", bat_ev->source, bat_ev->state_of_charge);
+    if (bat_ev == NULL) {
+        return (struct battery_update_state){.source = 0, .level = 0};
+    }
 
     return (struct battery_update_state){
         .source = bat_ev->source,
@@ -97,21 +114,23 @@ static struct battery_update_state battery_bar_get_battery_state(const zmk_event
     };
 }
 
-// Connection event handling
 void battery_bar_connection_update_cb(struct connection_update_state state) {
-    LOG_DBG("Connection update: source=%d, connected=%s", state.source, state.connected ? "true" : "false");
-
     struct zmk_widget_battery_bar *widget;
     SYS_SLIST_FOR_EACH_CONTAINER(&widgets, widget, node) {
-        set_battery_bar_connected(widget->obj, state);
+        set_battery_bar_connected(widget->obj, state, widget->initialized);
     }
 }
 
 static struct connection_update_state battery_bar_get_connection_state(const zmk_event_t *eh) {
+    if (eh == NULL) {
+        return (struct connection_update_state){.source = 0, .connected = false};
+    }
+
     const struct zmk_split_central_status_changed *conn_ev =
         as_zmk_split_central_status_changed(eh);
-
-    LOG_DBG("Received connection event: slot=%d, connected=%s", conn_ev->slot, conn_ev->connected ? "true" : "false");
+    if (conn_ev == NULL) {
+        return (struct connection_update_state){.source = 0, .connected = false};
+    }
 
     return (struct connection_update_state){
         .source = conn_ev->slot,
@@ -119,7 +138,6 @@ static struct connection_update_state battery_bar_get_connection_state(const zmk
     };
 }
 
-// Separate widget listeners for each event type
 ZMK_DISPLAY_WIDGET_LISTENER(widget_battery_bar_battery, struct battery_update_state,
                             battery_bar_battery_update_cb, battery_bar_get_battery_state);
 ZMK_SUBSCRIPTION(widget_battery_bar_battery, zmk_peripheral_battery_state_changed);
@@ -132,18 +150,11 @@ int zmk_widget_battery_bar_init(struct zmk_widget_battery_bar *widget, lv_obj_t 
     widget->obj = lv_obj_create(parent);
     lv_obj_set_width(widget->obj, lv_pct(100));
     lv_obj_set_flex_flow(widget->obj, LV_FLEX_FLOW_ROW);
-    lv_obj_set_flex_align(widget->obj,
-                          LV_FLEX_ALIGN_SPACE_EVENLY, // Main axis (horizontal)
-                          LV_FLEX_ALIGN_CENTER,       // Cross axis (vertical)
-                          LV_FLEX_ALIGN_CENTER        // Track alignment
-    );
+    lv_obj_set_flex_align(widget->obj, LV_FLEX_ALIGN_SPACE_EVENLY, LV_FLEX_ALIGN_CENTER,
+                          LV_FLEX_ALIGN_CENTER);
     lv_obj_set_style_pad_column(widget->obj, 12, LV_PART_MAIN);
-    // lv_obj_set_style_pad_all(widget->obj, 8, LV_PART_MAIN);
     lv_obj_set_style_pad_bottom(widget->obj, 12, LV_PART_MAIN);
-    // lv_obj_set_style_pad_top(widget->obj, 30, LV_PART_MAIN);
     lv_obj_set_style_pad_hor(widget->obj, 16, LV_PART_MAIN);
-
-    // lv_obj_add_flag(widget->obj, LV_OBJ_FLAG_OVERFLOW_VISIBLE);
 
     for (int i = 0; i < ZMK_SPLIT_BLE_PERIPHERAL_COUNT; i++) {
         lv_obj_t *info_container = lv_obj_create(widget->obj);
@@ -192,11 +203,11 @@ int zmk_widget_battery_bar_init(struct zmk_widget_battery_bar *widget, lv_obj_t 
         lv_obj_set_style_opa(nc_num, 255, 0);
     }
 
-    sys_slist_append(&widgets, &widget->node);
-
     widget_battery_bar_battery_init();
     widget_battery_bar_connection_init();
-    initialized = true;
+
+    widget->initialized = true;
+    sys_slist_append(&widgets, &widget->node);
 
     return 0;
 }

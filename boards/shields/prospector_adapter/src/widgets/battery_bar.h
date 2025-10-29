@@ -6,6 +6,7 @@
 struct zmk_widget_battery_bar {
     sys_snode_t node;
     lv_obj_t *obj;
+    bool initialized;
 };
 
 int zmk_widget_battery_bar_init(struct zmk_widget_battery_bar *widget, lv_obj_t *parent);
