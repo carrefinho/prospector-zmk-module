@@ -15,3 +15,17 @@ config PROSPECTOR_FIXED_BRIGHTNESS
     default 50
     range 1 100
     depends on !PROSPECTOR_USE_AMBIENT_LIGHT_SENSOR
+
+config PROSPECTOR_DISPLAY_SLEEP_ENABLE
+    bool "Turn off display on idle"
+    default n
+
+config PROSPECTOR_DISPLAY_IDLE_TIMEOUT_MS
+    int "Display idle timeout in ms"
+    default 30000
+    depends on PROSPECTOR_DISPLAY_SLEEP_ENABLE
+
+config PROSPECTOR_DISPLAY_SLEEP_USE_PM
+    bool "Use Zephyr PM to suspend the display (SLEEP_IN)"
+    default n
+    depends on PROSPECTOR_DISPLAY_SLEEP_ENABLE && PM_DEVICE
