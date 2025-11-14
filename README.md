@@ -69,6 +69,11 @@ To customize, add config options to your `config/[YOUR KEYBOARD SHIELD].conf` li
 ```ini
 CONFIG_PROSPECTOR_USE_AMBIENT_LIGHT_SENSOR=n
 CONFIG_PROSPECTOR_FIXED_BRIGHTNESS=80
+CONFIG_PROSPECTOR_DISPLAY_SLEEP_ENABLE=y
+CONFIG_PROSPECTOR_DISPLAY_IDLE_TIMEOUT_MS=30000
+# Optional: put display controller into sleep
+# CONFIG_PM_DEVICE=y
+# CONFIG_PROSPECTOR_DISPLAY_SLEEP_USE_PM=y
 ```
 
 ### Available config options:
@@ -78,3 +83,6 @@ CONFIG_PROSPECTOR_FIXED_BRIGHTNESS=80
 | `CONFIG_PROSPECTOR_FIXED_BRIGHTESS`               | Set fixed display brightess when not using ambient light sensor           | 50 (1-100)   |
 | `CONFIG_PROSPECTOR_PROSPECTOR_ROTATE_DISPLAY_180` | Rotate the display 180 degrees                                            | n            |
 | `CONFIG_PROSPECTOR_LAYER_ROLLER_ALL_CAPS`         | Convert layer names to all caps                                           | n            |
+| `CONFIG_PROSPECTOR_DISPLAY_SLEEP_ENABLE`          | Turn off display and backlight on idle                                    | n            |
+| `CONFIG_PROSPECTOR_DISPLAY_IDLE_TIMEOUT_MS`       | Idle timeout before turning display off (ms)                              | 30000        |
+| `CONFIG_PROSPECTOR_DISPLAY_SLEEP_USE_PM`          | Use Zephyr PM to suspend display controller (requires `CONFIG_PM_DEVICE`) | n            |
