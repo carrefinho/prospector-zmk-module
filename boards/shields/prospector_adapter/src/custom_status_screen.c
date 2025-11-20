@@ -5,7 +5,7 @@
 
 #include "widgets/layer_roller.h"
 #include "widgets/battery_bar.h"
-#include "widgets/caps_word_indicator.h"
+#include "widgets/modifier_indicator.h"
 
 #include <fonts.h>
 #include <sf_symbols.h>
@@ -17,7 +17,7 @@ LOG_MODULE_DECLARE(zmk, CONFIG_ZMK_LOG_LEVEL);
 
 static struct zmk_widget_layer_roller layer_roller_widget;
 static struct zmk_widget_battery_bar battery_bar_widget;
-static struct zmk_widget_caps_word_indicator caps_word_indicator_widget;
+static struct zmk_widget_modifier_indicator modifier_indicator_widget;
 
 lv_obj_t *zmk_display_status_screen() {
     lv_obj_t *screen;
@@ -25,10 +25,8 @@ lv_obj_t *zmk_display_status_screen() {
     lv_obj_set_style_bg_color(screen, lv_color_hex(0x000000), LV_PART_MAIN);
     lv_obj_set_style_bg_opa(screen, 255, LV_PART_MAIN);
 
-#ifdef CONFIG_DT_HAS_ZMK_BEHAVIOR_CAPS_WORD_ENABLED
-    zmk_widget_caps_word_indicator_init(&caps_word_indicator_widget, screen);
-    lv_obj_align(zmk_widget_caps_word_indicator_obj(&caps_word_indicator_widget), LV_ALIGN_RIGHT_MID, -10, 46);
-#endif
+    zmk_widget_modifier_indicator_init(&modifier_indicator_widget, screen);
+    lv_obj_align(zmk_widget_modifier_indicator_obj(&modifier_indicator_widget), LV_ALIGN_BOTTOM_RIGHT, -8, -56);
 
     zmk_widget_battery_bar_init(&battery_bar_widget, screen);
     // lv_obj_set_width(zmk_widget_battery_bar_obj(&battery_bar_widget), lv_pct(100));

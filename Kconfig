@@ -6,6 +6,10 @@ config PROSPECTOR_ROTATE_DISPLAY_180
     bool "Rotate the display 180 degrees"
     default n
 
+config PROSPECTOR_SHOW_MODIFIERS
+    bool "Display modifier key indicators (Cmd, Opt, Ctrl, Shift)"
+    default y
+
 config PROSPECTOR_USE_AMBIENT_LIGHT_SENSOR
     bool "Use ambient light sensor for auto brightness"
     default y
