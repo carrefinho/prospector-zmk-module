@@ -8,7 +8,6 @@
 #include "widgets/modifier_indicator.h"
 
 #include <fonts.h>
-#include <sf_symbols.h>
 
 #include <zmk/keymap.h>
 

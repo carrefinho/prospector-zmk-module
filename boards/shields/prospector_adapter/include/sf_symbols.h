@@ -1,6 +1,0 @@
-#define SF_SYMBOL_CONTROL "\xF4\x80\x86\x87"
-#define SF_SYMBOL_COMMAND "\xF4\x80\x86\x94"
-#define SF_SYMBOL_OPTION "\xF4\x80\x86\x95"
-#define SF_SYMBOL_SHIFT "\xF4\x80\x86\x9D"
-#define SF_SYMBOL_CAPS_LOCK "\xF4\x80\x86\xA1"
-#define SF_SYMBOL_CHARACTER_CURSOR_IBEAM "\xF4\x80\x85\xAB"
