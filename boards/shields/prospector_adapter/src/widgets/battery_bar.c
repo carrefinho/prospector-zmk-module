@@ -203,11 +203,10 @@ int zmk_widget_battery_bar_init(struct zmk_widget_battery_bar *widget, lv_obj_t 
         lv_obj_set_style_opa(nc_num, 255, 0);
     }
 
-    widget_battery_bar_battery_init();
-    widget_battery_bar_connection_init();
-
-    widget->initialized = true;
     sys_slist_append(&widgets, &widget->node);
+    widget->initialized = true;
+    widget_battery_bar_connection_init();
+    widget_battery_bar_battery_init();
 
     return 0;
 }
