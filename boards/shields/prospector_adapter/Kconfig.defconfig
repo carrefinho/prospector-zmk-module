@@ -32,7 +32,7 @@ config LV_Z_VDB_SIZE
     default 100
 
 config LV_Z_MEM_POOL_SIZE
-    default 10000
+    default 16384
 
 config LV_DPI_DEF
     default 261
