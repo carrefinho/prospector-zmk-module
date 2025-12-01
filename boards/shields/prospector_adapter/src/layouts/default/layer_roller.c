@@ -1,15 +1,11 @@
 #include "layer_roller.h"
 
-#include <ctype.h>
 #include <zmk/display.h>
 #include <zmk/events/layer_state_changed.h>
 #include <zmk/event_manager.h>
 #include <zmk/keymap.h>
 
 #include <fonts.h>
-
-#include <zephyr/logging/log.h>
-LOG_MODULE_DECLARE(zmk, CONFIG_ZMK_LOG_LEVEL);
 
 static char layer_names_buffer[512] = {0};
 
@@ -32,7 +28,6 @@ static void layer_roller_update_cb(struct layer_roller_state state) {
 
 static struct layer_roller_state layer_roller_get_state(const zmk_event_t *eh) {
     uint8_t index = zmk_keymap_highest_layer_active();
-    LOG_INF("Roller set to: %d", index);
     return (struct layer_roller_state){
         .index = index,
     };
@@ -108,19 +103,9 @@ int zmk_widget_layer_roller_init(struct zmk_widget_layer_roller *widget, lv_obj_
             }
 
             if (layer_name && *layer_name) {
-#if IS_ENABLED(CONFIG_LAYER_ROLLER_ALL_CAPS)
-                while (*layer_name) {
-                    *ptr = toupper((unsigned char)*layer_name);
-                    ptr++;
-                    layer_name++;
-                }
-                *ptr = '\0';
-#else
                 strcat(ptr, layer_name);
                 ptr += strlen(layer_name);
-#endif
             } else {
-                // Just use the number for unnamed layers
                 char index_str[12];
                 snprintf(index_str, sizeof(index_str), "%d", i);
                 strcat(ptr, index_str);
@@ -135,46 +120,17 @@ int zmk_widget_layer_roller_init(struct zmk_widget_layer_roller *widget, lv_obj_
     lv_style_init(&style);
     lv_style_set_bg_color(&style, lv_color_black());
     lv_style_set_text_color(&style, lv_color_white());
-    // lv_style_set_text_letter_space(&style, 2);
     lv_style_set_border_width(&style, 0);
     lv_style_set_pad_all(&style, 0);
-    // lv_obj_add_style(lv_scr_act(), &style, 0);
 
     lv_obj_add_style(widget->obj, &style, 0);
     lv_obj_set_style_bg_opa(widget->obj, LV_OPA_TRANSP, LV_PART_SELECTED);
-    lv_obj_set_style_text_font(widget->obj, &FRAC_Regular_48, LV_PART_SELECTED);
+    lv_obj_set_style_text_font(widget->obj, &FR_Regular_48, LV_PART_SELECTED);
     lv_obj_set_style_text_color(widget->obj, lv_color_hex(0xffffff), LV_PART_SELECTED);
-    // lv_obj_set_style_text_line_space(widget->obj, 20, LV_PART_SELECTED);
-    // lv_obj_set_style_text_line_space(widget->obj, 20, LV_PART_MAIN);
-    lv_obj_set_style_text_font(widget->obj, &FRAC_Thin_48, LV_PART_MAIN);
+    lv_obj_set_style_text_font(widget->obj, &FR_Thin_48, LV_PART_MAIN);
     lv_obj_set_style_text_color(widget->obj, lv_color_hex(0x909090), LV_PART_MAIN);
-    // lv_obj_set_style_text_align(widget->obj, LV_TEXT_ALIGN_CENTER, 0);
 
     lv_obj_add_event_cb(widget->obj, mask_event_cb, LV_EVENT_ALL, NULL);
-
-    // static lv_style_t style_roller;
-    // lv_style_init(&style_roller);
-    // lv_style_set_text_font(&style_roller, &SF_Compact_Text_Light_24);
-    // lv_style_set_text_letter_space(&style_roller, -0.5);
-    // lv_style_set_text_line_space(&style_roller, 20);
-    // lv_style_set_text_color(&style_roller, lv_color_hex(0x6b6b6b));
-    // lv_style_set_bg_color(&style_roller, lv_color_hex(0x050505));
-    // lv_style_set_bg_opa(&style_roller, 255);
-
-    // static lv_style_t style_roller_sel;
-    // lv_style_init(&style_roller_sel);
-    // lv_style_set_text_font(&style_roller_sel, &SF_Compact_Text_Semibold_28);
-    // lv_style_set_text_letter_space(&style_roller_sel, -0.5);
-    // lv_style_set_text_line_space(&style_roller_sel, 16);
-    // lv_style_set_text_color(&style_roller_sel, lv_color_hex(0xffffff));
-    // lv_style_set_bg_color(&style_roller_sel, lv_color_hex(0x1c1c1c));
-    // lv_style_set_bg_opa(&style_roller_sel, 255);
-
-    // lv_obj_set_style_text_align(widget->obj, LV_TEXT_ALIGN_CENTER, 0);
-    // lv_obj_add_style(widget->obj, &style_roller, LV_PART_MAIN);
-    // lv_obj_add_style(widget->obj, &style_roller_sel, LV_PART_SELECTED);
-    // lv_obj_set_style_radius(widget->obj, 20, LV_PART_MAIN);
-
     lv_obj_set_style_anim_time(widget->obj, 100, 0);
 
     sys_slist_append(&widgets, &widget->node);

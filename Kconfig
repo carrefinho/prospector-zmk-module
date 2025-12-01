@@ -1,6 +1,23 @@
-config PROSPECTOR_LAYER_ROLLER_ALL_CAPS
-    bool "Convert layer names to all caps"
-    default n
+choice PROSPECTOR_STATUS_SCREEN_LAYOUT
+    prompt "Status screen layout"
+    default PROSPECTOR_STATUS_SCREEN_DEFAULT
+
+config PROSPECTOR_STATUS_SCREEN_DEFAULT
+    bool "Default layout"
+    help
+        Standard Prospector status screen
+
+config PROSPECTOR_STATUS_SCREEN_ROUNDED_GRID
+    bool "Rounded grid layout"
+    help
+        Colorful grid layout with rounded widgets
+
+config PROSPECTOR_STATUS_SCREEN_WIND_MAP
+    bool "Wind map layout"
+    help
+        Status screen centered around wind map style WPM visualization
+
+endchoice
 
 config PROSPECTOR_ROTATE_DISPLAY_180
     bool "Rotate the display 180 degrees"
@@ -9,6 +26,15 @@ config PROSPECTOR_ROTATE_DISPLAY_180
 config PROSPECTOR_SHOW_MODIFIERS
     bool "Display modifier key indicators (Cmd, Opt, Ctrl, Shift)"
     default y
+
+config PROSPECTOR_SHOW_INACTIVE_MODIFIERS
+    bool "Show inactive modifier indicators (dim when not pressed)"
+    default y
+    depends on PROSPECTOR_SHOW_MODIFIERS
+    help
+      When enabled, inactive modifiers are shown with a dim color.
+      When disabled, inactive modifiers are hidden completely.
+      Only affects default and wind_map layouts.
 
 config PROSPECTOR_USE_AMBIENT_LIGHT_SENSOR
     bool "Use ambient light sensor for auto brightness"

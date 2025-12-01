@@ -1,0 +1,31 @@
+if PROSPECTOR_STATUS_SCREEN_WIND_MAP
+
+config ZMK_DISPLAY_STATUS_SCREEN_CUSTOM
+    select LV_USE_LABEL
+    select LV_COLOR_SCREEN_TRANSP
+    select ZMK_WPM
+
+config PROSPECTOR_ANIMATION_WPM_REFERENCE
+    int "WPM value at which animation reaches max speed"
+    default 70
+    range 30 300
+
+config PROSPECTOR_ANIMATION_INTENSITY_DECAY_SEC
+    int "Time in seconds for lines to fade out after typing stops"
+    default 30
+    range 5 120
+    help
+      Controls how quickly lines fade out (opacity) after you stop typing.
+      Shorter values = faster fade, longer values = lines linger more.
+      Animation freezes at 10% of this time.
+
+config PROSPECTOR_ANIMATION_FLOW_DECAY_SEC
+    int "Time in seconds for line directions and length to settle after typing stops"
+    default 300
+    range 30 600
+    help
+      Controls how long lines maintain their direction and length.
+      Lines gradually return to idle angle and shrink over this period.
+      Longer values = more persistent flowing and length effect.
+
+endif
