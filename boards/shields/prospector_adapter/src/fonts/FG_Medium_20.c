@@ -2,7 +2,7 @@
 /*******************************************************************************
  * Size: 20 px
  * Bpp: 4
- * Opts: --font ttf/FoundryGridnikMedium.ttf --bpp 4 --size 20 --no-compress --format lvgl --r 0x20-0x60 -o 20/FoundryGridnikMedium_20.c
+ * Opts: --font ttf/FoundryGridnikMedium.ttf --bpp 4 --size 20 --no-compress --format lvgl --r 0x20-0x60 -o 20/FG_Medium_20.c
  ******************************************************************************/
 
 
@@ -936,9 +936,9 @@ static lv_font_fmt_txt_dsc_t font_dsc = {
 
 /*Initialize a public general font descriptor*/
 #if LVGL_VERSION_MAJOR >= 8
-const lv_font_t FoundryGridnikMedium_20 = {
+const lv_font_t FG_Medium_20 = {
 #else
-lv_font_t FoundryGridnikMedium_20 = {
+lv_font_t FG_Medium_20 = {
 #endif
     .get_glyph_dsc = lv_font_get_glyph_dsc_fmt_txt,    /*Function pointer to get glyph's data*/
     .get_glyph_bitmap = lv_font_get_bitmap_fmt_txt,    /*Function pointer to get glyph's bitmap*/

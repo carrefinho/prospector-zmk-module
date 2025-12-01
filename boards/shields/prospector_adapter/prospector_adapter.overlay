@@ -1,5 +1,57 @@
 / {
    chosen {
       zephyr,display = &st7789;
-  };
+   };
+
+   prospector_green_theme: prospector_green_theme {
+      compatible = "zmk,prospector-theme";
+      left-panel-bg = <0x0D2C26>;
+      mod-panel-bg = <0x708066>;
+      battery-panel-bg = <0x2D373D>;
+      arc-bg = <0x3B5C68>;
+      arc-indicator = <0xA2B5B8>;
+      layer-wheel-color = <0x00FF90>;
+      layer-text-color = <0x00FF90>;
+      mod-active-color = <0xE2FF61>;
+      mod-inactive-color = <0x4C564B>;
+   };
+
+   prospector_blue_theme: prospector_blue_theme {
+      compatible = "zmk,prospector-theme";
+      left-panel-bg = <0xACB9D3>;
+      mod-panel-bg = <0x1448AA>;
+      battery-panel-bg = <0xE2FF61>;
+      arc-bg = <0xA8BF41>;
+      arc-indicator = <0x576610>;
+      layer-wheel-color = <0x000000>;
+      layer-text-color = <0x000000>;
+      mod-active-color = <0x61E7FF>;
+      mod-inactive-color = <0x0C2B65>;
+   };
+
+   prospector_red_theme: prospector_red_theme {
+      compatible = "zmk,prospector-theme";
+      left-panel-bg = <0xD77B7A>;
+      mod-panel-bg = <0x7B4B5C>;
+      battery-panel-bg = <0xC7BFAD>;
+      arc-bg = <0xA29986>;
+      arc-indicator = <0x462525>;
+      layer-wheel-color = <0x000000>;
+      layer-text-color = <0x000000>;
+      mod-active-color = <0xFFAAAB>;
+      mod-inactive-color = <0x471627>;
+   };
+
+   prospector_purple_theme: prospector_purple_theme {
+      compatible = "zmk,prospector-theme";
+      left-panel-bg = <0x212121>;
+      mod-panel-bg = <0x858585>;
+      battery-panel-bg = <0x8774B4>;
+      arc-bg = <0x70618F>;
+      arc-indicator = <0x302745>;
+      layer-wheel-color = <0xFFFFFF>;
+      layer-text-color = <0xFFFFFF>;
+      mod-active-color = <0x38FFB3>;
+      mod-inactive-color = <0xB0B0B0>;
+   };
 };

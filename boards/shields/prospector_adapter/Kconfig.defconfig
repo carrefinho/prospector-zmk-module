@@ -10,12 +10,7 @@ choice ZMK_DISPLAY_STATUS_SCREEN
     default ZMK_DISPLAY_STATUS_SCREEN_CUSTOM
 endchoice
 
-config ZMK_DISPLAY_STATUS_SCREEN_CUSTOM
-    select LV_USE_LABEL
-    select LV_USE_BAR
-    select LV_USE_FLEX
-    select LV_USE_ROLLER
-    select LV_COLOR_SCREEN_TRANSP
+rsource "src/layouts/*/Kconfig.defconfig"
 
 choice ZMK_DISPLAY_WORK_QUEUE
     default ZMK_DISPLAY_WORK_QUEUE_DEDICATED

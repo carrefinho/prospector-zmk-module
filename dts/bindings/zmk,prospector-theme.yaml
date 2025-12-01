@@ -1,0 +1,32 @@
+description: Prospector display theme
+
+compatible: "zmk,prospector-theme"
+
+properties:
+  left-panel-bg:
+    type: int
+    required: false
+  mod-panel-bg:
+    type: int
+    required: false
+  battery-panel-bg:
+    type: int
+    required: false
+  arc-bg:
+    type: int
+    required: false
+  arc-indicator:
+    type: int
+    required: false
+  layer-wheel-color:
+    type: int
+    required: false
+  layer-text-color:
+    type: int
+    required: false
+  mod-active-color:
+    type: int
+    required: false
+  mod-inactive-color:
+    type: int
+    required: false
