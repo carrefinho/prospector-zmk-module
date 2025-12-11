@@ -171,7 +171,6 @@ int zmk_widget_battery_bar_init(struct zmk_widget_battery_bar *widget, lv_obj_t 
         lv_obj_set_style_bg_color(bar, lv_color_hex(0x909090), LV_PART_INDICATOR);
         lv_obj_set_style_bg_opa(bar, 255, LV_PART_INDICATOR);
         lv_obj_set_style_bg_grad_color(bar, lv_color_hex(0xf0f0f0), LV_PART_INDICATOR);
-        lv_obj_set_style_bg_dither_mode(bar, LV_DITHER_ERR_DIFF, LV_PART_INDICATOR);
         lv_obj_set_style_bg_grad_dir(bar, LV_GRAD_DIR_HOR, LV_PART_INDICATOR);
         lv_obj_set_style_radius(bar, 1, LV_PART_INDICATOR);
         lv_obj_set_style_anim_time(bar, 250, 0);
