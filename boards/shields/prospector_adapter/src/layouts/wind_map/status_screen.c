@@ -29,10 +29,9 @@ lv_obj_t *zmk_display_status_screen() {
 
     zmk_widget_modifier_indicator_init(&modifier_indicator_widget, screen);
 
-    zmk_widget_line_segments_add_exclusion(&line_segments_widget,
-                                           zmk_widget_layer_label_obj(&layer_label_widget));
-    zmk_widget_line_segments_add_exclusion(&line_segments_widget,
-                                           zmk_widget_battery_label_obj(&battery_label_widget));
+    zmk_widget_line_segments_set_labels(&line_segments_widget,
+                                        zmk_widget_layer_label_obj(&layer_label_widget),
+                                        zmk_widget_battery_label_obj(&battery_label_widget));
 
     return screen;
 }

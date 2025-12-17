@@ -1,6 +1,9 @@
 #include "line_segments.h"
 #include "line_endpoints.h"
 
+#include <zephyr/logging/log.h>
+LOG_MODULE_DECLARE(zmk, CONFIG_ZMK_LOG_LEVEL);
+
 #define _USE_MATH_DEFINES
 #include <math.h>
 #include <lvgl.h>
@@ -56,7 +59,6 @@
 #define NOISE_SPATIAL_X_SCALE   0.5f    // X-coordinate scale for opacity noise
 #define NOISE_SPATIAL_Y_SCALE   0.5f    // Y-coordinate scale for opacity noise
 
-#define EXCLUSION_UPDATE_MIN_MS 50      // Minimum interval between exclusion updates (ms)
 #define TIMER_PERIOD_30HZ       33      // Timer period for 30Hz updates (ms)
 #define TIMER_PERIOD_15HZ       66      // Timer period for 15Hz updates (ms)
 #define TIMER_PERIOD_2HZ        500     // Timer period for 2Hz idle wobble (ms)
@@ -148,20 +150,17 @@ static float intensity = 0.0f;
 static uint32_t last_keypress_time = 0;
 static int current_wpm = 0;
 static bool animation_started = false;
-static bool initial_render_done = false;
 
 static float smoothed_angles[GRID_COLS * GRID_ROWS];
 static uint8_t line_endpoint_idx[GRID_COLS * GRID_ROWS];
 static float line_length_scale[GRID_COLS * GRID_ROWS];
 static lv_opa_t line_opacity[GRID_COLS * GRID_ROWS];
 
-static lv_area_t cached_excl_areas[LINE_SEGMENTS_MAX_EXCLUSIONS];
-static uint8_t cached_excl_count = 0;
-static uint64_t excluded_cells = 0;
+static uint64_t label_excluded_cells = 0;     // From labels (computed from width)
+static uint64_t modifier_excluded_cells = 0;  // From modifiers (set via API)
 
 static sys_slist_t widgets = SYS_SLIST_STATIC_INIT(&widgets);
 static lv_timer_t *animation_timer = NULL;
-static uint32_t last_exclusion_update = 0;
 static uint32_t last_timer_period = 33;
 
 static float lines_noise(float x, float y, float t) {
@@ -196,67 +195,72 @@ static int wpm_event_handler(const zmk_event_t *eh) {
 ZMK_LISTENER(widget_line_segments, wpm_event_handler);
 ZMK_SUBSCRIPTION(widget_line_segments, zmk_wpm_state_changed);
 
-static void update_exclusion_cache(void);
-
-static void exclusion_event_handler(lv_event_t *e) {
-    lv_event_code_t code = lv_event_get_code(e);
-    if (code == LV_EVENT_SIZE_CHANGED) {
-        uint32_t now = k_uptime_get_32();
-
-        // Throttle updates to max 20Hz
-        if (now - last_exclusion_update >= EXCLUSION_UPDATE_MIN_MS) {
-            update_exclusion_cache();
-            last_exclusion_update = now;
+// Calculate how many columns a label width covers (starting from column 0)
+static int width_to_columns(int width) {
+    // Labels start at x≈6
+    // Exclude column if label overlaps grid box (center ± SPACING/2)
+    int label_right = 6 + width;
+    for (int col = 0; col < GRID_COLS; col++) {
+        int cell_left = grid_cx[col] - SPACING / 2;
+        if (label_right <= cell_left) {
+            return col;
         }
     }
+    return GRID_COLS;
 }
 
-static void update_exclusion_cache(void) {
-    cached_excl_count = 0;
+static void update_label_excluded_cells(void) {
+    label_excluded_cells = 0;
 
     struct zmk_widget_line_segments *widget;
     SYS_SLIST_FOR_EACH_CONTAINER(&widgets, widget, node) {
-        if (!widget->obj) continue;
+        // Layer label excludes cells in row 0
+        if (widget->layer_label) {
+            int width = lv_obj_get_width(widget->layer_label);
+            int cols = width_to_columns(width);
+            for (int col = 0; col < cols; col++) {
+                label_excluded_cells |= (1ULL << col);
+            }
+        }
 
-        lv_area_t widget_coords;
-        lv_obj_get_coords(widget->obj, &widget_coords);
-
-        for (int i = 0; i < widget->exclusion_count && i < LINE_SEGMENTS_MAX_EXCLUSIONS; i++) {
-            if (widget->exclusion_objs[i]) {
-                lv_area_t obj_coords;
-                lv_obj_get_coords(widget->exclusion_objs[i], &obj_coords);
-
-                cached_excl_areas[cached_excl_count].x1 = obj_coords.x1 - widget_coords.x1;
-                cached_excl_areas[cached_excl_count].y1 = obj_coords.y1 - widget_coords.y1;
-                cached_excl_areas[cached_excl_count].x2 = obj_coords.x2 - widget_coords.x1;
-                cached_excl_areas[cached_excl_count].y2 = obj_coords.y2 - widget_coords.y1;
-
-                lv_coord_t height = cached_excl_areas[cached_excl_count].y2 - cached_excl_areas[cached_excl_count].y1;
-                cached_excl_areas[cached_excl_count].y2 -= height / 4;
-
-                cached_excl_count++;
+        // Battery label excludes cells in row 5
+        if (widget->battery_label) {
+            int width = lv_obj_get_width(widget->battery_label);
+            int cols = width_to_columns(width);
+            for (int col = 0; col < cols; col++) {
+                label_excluded_cells |= (1ULL << (5 * GRID_COLS + col));
             }
         }
         break;
     }
 }
 
+static void label_size_changed_cb(lv_event_t *e) {
+    update_label_excluded_cells();
+
+    // Invalidate widget to redraw with new exclusions
+    struct zmk_widget_line_segments *widget;
+    SYS_SLIST_FOR_EACH_CONTAINER(&widgets, widget, node) {
+        lv_obj_invalidate(widget->obj);
+    }
+}
+
+static uint32_t perf_update_us = 0;
+static uint32_t perf_draw_us = 0;
+static uint32_t perf_frame_count = 0;
+
 static void lines_update(void) {
+    uint32_t start = k_cycle_get_32();
+
     const float delta_time = 1.0f / 30.0f;
     uint32_t now = k_uptime_get_32();
     uint32_t idle_ms = now - last_keypress_time;
 
     const uint32_t INTENSITY_DECAY_MS = CONFIG_PROSPECTOR_ANIMATION_INTENSITY_DECAY_SEC * 1000;
     const uint32_t FLOW_DECAY_MS = CONFIG_PROSPECTOR_ANIMATION_FLOW_DECAY_SEC * 1000;
-    const uint32_t EXCLUSION_UPDATE_MS = 5000;
 
     static float intensity_at_stop = 0.0f;
     static float flow_at_stop = 0.0f;
-
-    if (now - last_exclusion_update > EXCLUSION_UPDATE_MS) {
-        update_exclusion_cache();
-        last_exclusion_update = now;
-    }
 
     if (current_wpm > 0 || idle_ms < INTENSITY_DECAY_MS / 10) {
         float speed = ANIM_BASE_SPEED + (current_wpm / (float)CONFIG_PROSPECTOR_ANIMATION_WPM_REFERENCE) * ANIM_WPM_SPEED_MULTIPLIER;
@@ -313,14 +317,23 @@ static void lines_update(void) {
                 line_opacity[line_idx] = (lv_opa_t)(clampf(final_opa, OPACITY_MIN, OPACITY_MAX) * 255.0f);
             }
     }
+
+    uint32_t elapsed = k_cycle_get_32() - start;
+    perf_update_us = k_cyc_to_us_floor32(elapsed);
 }
 
 static void draw_cb(lv_event_t *e) {
+    uint32_t start = k_cycle_get_32();
     lv_obj_t *obj = lv_event_get_target(e);
     lv_layer_t *layer = lv_event_get_layer(e);
 
     lv_area_t obj_coords;
     lv_obj_get_coords(obj, &obj_coords);
+
+    int32_t obj_x1 = obj_coords.x1;
+    int32_t obj_y1 = obj_coords.y1;
+
+    uint64_t excluded = label_excluded_cells | modifier_excluded_cells;
 
     lv_draw_line_dsc_t line_dsc;
     lv_draw_line_dsc_init(&line_dsc);
@@ -329,35 +342,16 @@ static void draw_cb(lv_event_t *e) {
     line_dsc.round_start = 0;
     line_dsc.round_end = 0;
 
-    int32_t obj_x1 = obj_coords.x1;
-    int32_t obj_y1 = obj_coords.y1;
-
     for (int row = 0; row < GRID_ROWS; row++) {
-        int cy = grid_cy[row];
         for (int col = 0; col < GRID_COLS; col++) {
             int line_idx = row * GRID_COLS + col;
-            int cx = grid_cx[col];
 
-            if (excluded_cells & (1ULL << line_idx)) {
+            if (excluded & (1ULL << line_idx)) {
                 continue;
             }
 
-            if (cached_excl_count > 0) {
-                int lx1 = cx - LINE_ENDPOINT_LENGTH;
-                int ly1 = cy - LINE_ENDPOINT_LENGTH;
-                int lx2 = cx + LINE_ENDPOINT_LENGTH;
-                int ly2 = cy + LINE_ENDPOINT_LENGTH;
-
-                bool excluded = false;
-                for (int i = 0; i < cached_excl_count; i++) {
-                    if (!(lx2 < cached_excl_areas[i].x1 || lx1 > cached_excl_areas[i].x2 ||
-                          ly2 < cached_excl_areas[i].y1 || ly1 > cached_excl_areas[i].y2)) {
-                        excluded = true;
-                        break;
-                    }
-                }
-                if (excluded) continue;
-            }
+            int cx = grid_cx[col];
+            int cy = grid_cy[row];
 
             line_dsc.opa = line_opacity[line_idx];
 
@@ -375,32 +369,25 @@ static void draw_cb(lv_event_t *e) {
             lv_draw_line(layer, &line_dsc);
         }
     }
+
+    uint32_t elapsed = k_cycle_get_32() - start;
+    perf_draw_us = k_cyc_to_us_floor32(elapsed);
+
+    perf_frame_count++;
+    if (perf_frame_count >= 30) {
+        LOG_INF("perf: update=%uus draw=%uus", perf_update_us, perf_draw_us);
+        perf_frame_count = 0;
+    }
 }
 
 static void timer_cb(lv_timer_t *timer) {
     uint32_t now = k_uptime_get_32();
-    uint32_t idle_ms;
-
-    if (!animation_started) {
-        if (!initial_render_done) {
-            update_exclusion_cache();
-            lines_update();
-            initial_render_done = true;
-
-            struct zmk_widget_line_segments *widget;
-            SYS_SLIST_FOR_EACH_CONTAINER(&widgets, widget, node) {
-                lv_obj_invalidate(widget->obj);
-            }
-        }
-        return;
-    }
-
-    idle_ms = now - last_keypress_time;
+    uint32_t idle_ms = now - last_keypress_time;
 
     uint32_t target_period;
     if (current_wpm > 0) {
         target_period = TIMER_PERIOD_30HZ;
-    } else if (idle_ms < CONFIG_PROSPECTOR_ANIMATION_FLOW_DECAY_SEC * 1000) {
+    } else if (animation_started && idle_ms < CONFIG_PROSPECTOR_ANIMATION_FLOW_DECAY_SEC * 1000) {
         target_period = TIMER_PERIOD_15HZ;
     } else {
         target_period = TIMER_PERIOD_2HZ;
@@ -425,15 +412,13 @@ int zmk_widget_line_segments_init(struct zmk_widget_line_segments *widget, lv_ob
     for (int row = 0; row < GRID_ROWS; row++) {
         for (int col = 0; col < GRID_COLS; col++) {
             int line_idx = row * GRID_COLS + col;
-            smoothed_angles[line_idx] = -M_PI_4 + sinf(col * 0.3f + row * 0.2f) * 0.15f;
+            smoothed_angles[line_idx] = -M_PI_4;
         }
     }
 
     widget->obj = lv_obj_create(parent);
-    widget->exclusion_count = 0;
-    for (int i = 0; i < LINE_SEGMENTS_MAX_EXCLUSIONS; i++) {
-        widget->exclusion_objs[i] = NULL;
-    }
+    widget->layer_label = NULL;
+    widget->battery_label = NULL;
 
     lv_obj_remove_style_all(widget->obj);
     lv_obj_set_style_bg_opa(widget->obj, LV_OPA_TRANSP, 0);
@@ -453,13 +438,20 @@ lv_obj_t *zmk_widget_line_segments_obj(struct zmk_widget_line_segments *widget) 
     return widget->obj;
 }
 
-void zmk_widget_line_segments_add_exclusion(struct zmk_widget_line_segments *widget, lv_obj_t *obj) {
-    if (widget->exclusion_count < LINE_SEGMENTS_MAX_EXCLUSIONS) {
-        widget->exclusion_objs[widget->exclusion_count++] = obj;
-        lv_obj_add_event_cb(obj, exclusion_event_handler, LV_EVENT_SIZE_CHANGED, NULL);
-        update_exclusion_cache();
-        last_exclusion_update = k_uptime_get_32();
+void zmk_widget_line_segments_set_labels(struct zmk_widget_line_segments *widget,
+                                         lv_obj_t *layer_label,
+                                         lv_obj_t *battery_label) {
+    widget->layer_label = layer_label;
+    widget->battery_label = battery_label;
+
+    if (layer_label) {
+        lv_obj_add_event_cb(layer_label, label_size_changed_cb, LV_EVENT_SIZE_CHANGED, NULL);
     }
+    if (battery_label) {
+        lv_obj_add_event_cb(battery_label, label_size_changed_cb, LV_EVENT_SIZE_CHANGED, NULL);
+    }
+
+    update_label_excluded_cells();
 }
 
 void zmk_widget_line_segments_set_cell_excluded(int col, int row, bool excluded) {
@@ -468,8 +460,8 @@ void zmk_widget_line_segments_set_cell_excluded(int col, int row, bool excluded)
     }
     uint64_t mask = 1ULL << (row * GRID_COLS + col);
     if (excluded) {
-        excluded_cells |= mask;
+        modifier_excluded_cells |= mask;
     } else {
-        excluded_cells &= ~mask;
+        modifier_excluded_cells &= ~mask;
     }
 }
