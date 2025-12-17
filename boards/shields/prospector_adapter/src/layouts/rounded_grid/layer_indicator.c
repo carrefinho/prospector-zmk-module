@@ -9,28 +9,47 @@
 #include <fonts.h>
 #include "display_colors.h"
 
+#define WHEEL_SIZE 48
+#define WHEEL_CENTER (WHEEL_SIZE / 2)
+#define WHEEL_INNER_RADIUS 12
+#define WHEEL_OUTER_RADIUS 20
+
+#ifndef M_PI
+#define M_PI 3.14159265358979323846f
+#endif
+
 static sys_slist_t widgets = SYS_SLIST_STATIC_INIT(&widgets);
 
 struct layer_indicator_state {
     uint8_t index;
 };
 
-static void set_angle_anim(void *obj, int32_t v) {
-    lv_obj_set_style_transform_angle(obj, v, 0);
+// Animation callback for image rotation
+static void set_image_rotation_anim(void *obj, int32_t v) {
+    lv_image_set_rotation(obj, v);
 }
 
 static void layer_indicator_set_sel(struct zmk_widget_layer_indicator *widget, struct layer_indicator_state state) {
-    int16_t current_angle = lv_obj_get_style_transform_angle(widget->wheel, 0);
-    int16_t target_angle = ((state.index * 3600) / ZMK_KEYMAP_LAYERS_LEN) - 900;
+    // Calculate target angle: layer 0 at top (0°), going clockwise
+    // lv_image rotation is in 0.1 degree units
+    int32_t angle_per_layer = 3600 / ZMK_KEYMAP_LAYERS_LEN;
+    int32_t target_angle = -(state.index * angle_per_layer);  // Negative to rotate wheel so current layer is at top
 
-    lv_anim_t a_rot;
-    lv_anim_init(&a_rot);
-    lv_anim_set_var(&a_rot, widget->wheel);
-    lv_anim_set_values(&a_rot, current_angle, target_angle);
-    lv_anim_set_time(&a_rot, 150);
-    lv_anim_set_path_cb(&a_rot, lv_anim_path_ease_in_out);
-    lv_anim_set_exec_cb(&a_rot, set_angle_anim);
-    lv_anim_start(&a_rot);
+    int32_t current_angle = lv_image_get_rotation(widget->wheel);
+
+    // Normalize for shortest path
+    int32_t diff = target_angle - current_angle;
+    while (diff > 1800) { target_angle -= 3600; diff = target_angle - current_angle; }
+    while (diff < -1800) { target_angle += 3600; diff = target_angle - current_angle; }
+
+    lv_anim_t a;
+    lv_anim_init(&a);
+    lv_anim_set_var(&a, widget->wheel);
+    lv_anim_set_values(&a, current_angle, target_angle);
+    lv_anim_set_time(&a, 150);
+    lv_anim_set_path_cb(&a, lv_anim_path_ease_in_out);
+    lv_anim_set_exec_cb(&a, set_image_rotation_anim);
+    lv_anim_start(&a);
 
     const char *layer_name = zmk_keymap_layer_name(zmk_keymap_layer_index_to_id(state.index));
     char display_name[64];
@@ -72,33 +91,50 @@ int zmk_widget_layer_indicator_init(struct zmk_widget_layer_indicator *widget, l
     lv_obj_set_flex_align(widget->container, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START);
     lv_obj_set_style_pad_row(widget->container, 12, 0);
 
-    widget->wheel = lv_canvas_create(widget->container);
-    static lv_color_t wheel_buf[LV_CANVAS_BUF_SIZE_TRUE_COLOR_ALPHA(48, 48)];
-    lv_canvas_set_buffer(widget->wheel, wheel_buf, 48, 48, LV_IMG_CF_TRUE_COLOR_ALPHA);
-    lv_obj_set_style_transform_pivot_x(widget->wheel, 24, 0);
-    lv_obj_set_style_transform_pivot_y(widget->wheel, 24, 0);
-    lv_obj_set_style_bg_opa(widget->wheel, LV_OPA_TRANSP, 0);
+    // Create a canvas to draw the wheel
+    static lv_obj_t *canvas;
+    canvas = lv_canvas_create(widget->container);
 
-    lv_canvas_fill_bg(widget->wheel, lv_color_hex(0x000000), LV_OPA_TRANSP);
+    // Allocate buffer for canvas - use ARGB8888 for transparency support
+    static uint8_t canvas_buf[LV_CANVAS_BUF_SIZE(WHEEL_SIZE, WHEEL_SIZE, 32, 1)];
+    lv_canvas_set_buffer(canvas, canvas_buf, WHEEL_SIZE, WHEEL_SIZE, LV_COLOR_FORMAT_ARGB8888);
+    lv_canvas_fill_bg(canvas, lv_color_hex(0x000000), LV_OPA_TRANSP);
+
+    // Draw tick lines on canvas using layer API
+    lv_layer_t layer;
+    lv_canvas_init_layer(canvas, &layer);
+
     lv_draw_line_dsc_t line_dsc;
     lv_draw_line_dsc_init(&line_dsc);
     line_dsc.color = lv_color_hex(DISPLAY_COLOR_LAYER_WHEEL);
     line_dsc.width = 4;
     line_dsc.opa = LV_OPA_COVER;
-    line_dsc.round_end = 1;
     line_dsc.round_start = 1;
+    line_dsc.round_end = 1;
 
-    float angle_offset = 0.0f;
     for (int i = 0; i < ZMK_KEYMAP_LAYERS_LEN; i++) {
-        float angle = (i * 360.0f / ZMK_KEYMAP_LAYERS_LEN) * 3.14159f / 180.0f + angle_offset;
-        lv_point_t points[2];
-        points[0].x = 24 + (int)(12 * cosf(angle));
-        points[0].y = 24 + (int)(12 * sinf(angle));
-        points[1].x = 24 + (int)(20 * cosf(angle));
-        points[1].y = 24 + (int)(20 * sinf(angle));
-        lv_canvas_draw_line(widget->wheel, points, 2, &line_dsc);
+        float angle = ((float)i * 360.0f / ZMK_KEYMAP_LAYERS_LEN - 90.0f) * M_PI / 180.0f;
+
+        line_dsc.p1.x = WHEEL_CENTER + (int)(WHEEL_INNER_RADIUS * cosf(angle));
+        line_dsc.p1.y = WHEEL_CENTER + (int)(WHEEL_INNER_RADIUS * sinf(angle));
+        line_dsc.p2.x = WHEEL_CENTER + (int)(WHEEL_OUTER_RADIUS * cosf(angle));
+        line_dsc.p2.y = WHEEL_CENTER + (int)(WHEEL_OUTER_RADIUS * sinf(angle));
+
+        lv_draw_line(&layer, &line_dsc);
     }
 
+    lv_canvas_finish_layer(canvas, &layer);
+
+    // Now create an image widget that uses the canvas as its source
+    widget->wheel = lv_image_create(widget->container);
+    lv_image_set_src(widget->wheel, lv_canvas_get_image(canvas));
+    lv_image_set_pivot(widget->wheel, WHEEL_CENTER, WHEEL_CENTER);
+    lv_image_set_rotation(widget->wheel, 0);
+
+    // Hide the original canvas, we only need the image
+    lv_obj_add_flag(canvas, LV_OBJ_FLAG_HIDDEN);
+
+    // Layer name label
     widget->obj = lv_label_create(widget->container);
     lv_obj_set_style_text_font(widget->obj, &PPF_NarrowThin_64, 0);
     lv_obj_set_style_text_color(widget->obj, lv_color_hex(DISPLAY_COLOR_LAYER_TEXT), 0);

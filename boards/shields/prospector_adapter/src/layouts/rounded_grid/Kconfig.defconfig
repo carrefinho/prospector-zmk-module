@@ -3,9 +3,10 @@ if PROSPECTOR_STATUS_SCREEN_ROUNDED_GRID
 config ZMK_DISPLAY_STATUS_SCREEN_CUSTOM
     select LV_USE_LABEL
     select LV_USE_FLEX
-    select LV_USE_CANVAS
     select LV_USE_ARC
     select LV_USE_SPINNER
+    select LV_USE_CANVAS
+    select LV_USE_IMAGE
     select LV_COLOR_SCREEN_TRANSP
 
 endif

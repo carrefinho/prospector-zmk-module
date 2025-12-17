@@ -185,7 +185,8 @@ int zmk_widget_output_init(struct zmk_widget_output *widget, lv_obj_t *parent) {
     lv_obj_clear_flag(widget->profile_circle, LV_OBJ_FLAG_CLICKABLE);
     lv_obj_align(widget->profile_circle, LV_ALIGN_TOP_RIGHT, -48, 0);
 
-    widget->profile_spinner = lv_spinner_create(parent, 1000, 90);
+    widget->profile_spinner = lv_spinner_create(parent);
+    lv_spinner_set_anim_params(widget->profile_spinner, 1000, 90);
     lv_obj_set_size(widget->profile_spinner, 24, 24);
     lv_obj_set_style_arc_width(widget->profile_spinner, 4, LV_PART_MAIN);
     lv_obj_set_style_arc_width(widget->profile_spinner, 4, LV_PART_INDICATOR);

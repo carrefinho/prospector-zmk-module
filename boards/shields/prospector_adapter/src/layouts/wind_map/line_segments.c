@@ -317,17 +317,10 @@ static void lines_update(void) {
 
 static void draw_cb(lv_event_t *e) {
     lv_obj_t *obj = lv_event_get_target(e);
-    lv_draw_ctx_t *draw_ctx = lv_event_get_draw_ctx(e);
+    lv_layer_t *layer = lv_event_get_layer(e);
 
     lv_area_t obj_coords;
     lv_obj_get_coords(obj, &obj_coords);
-
-    lv_area_t clip_area;
-    if (!_lv_area_intersect(&clip_area, &obj_coords, draw_ctx->clip_area)) {
-        return;
-    }
-    const lv_area_t *orig_clip = draw_ctx->clip_area;
-    draw_ctx->clip_area = &clip_area;
 
     lv_draw_line_dsc_t line_dsc;
     lv_draw_line_dsc_init(&line_dsc);
@@ -336,8 +329,8 @@ static void draw_cb(lv_event_t *e) {
     line_dsc.round_start = 0;
     line_dsc.round_end = 0;
 
-    lv_coord_t obj_x1 = obj_coords.x1;
-    lv_coord_t obj_y1 = obj_coords.y1;
+    int32_t obj_x1 = obj_coords.x1;
+    int32_t obj_y1 = obj_coords.y1;
 
     for (int row = 0; row < GRID_ROWS; row++) {
         int cy = grid_cy[row];
@@ -375,13 +368,13 @@ static void draw_cb(lv_event_t *e) {
             int16_t dx = (int16_t)(dx_base * scale);
             int16_t dy = (int16_t)(dy_base * scale);
 
-            lv_point_t p1 = {obj_x1 + cx - dx, obj_y1 + cy - dy};
-            lv_point_t p2 = {obj_x1 + cx + dx, obj_y1 + cy + dy};
-            lv_draw_line(draw_ctx, &line_dsc, &p1, &p2);
+            line_dsc.p1.x = obj_x1 + cx - dx;
+            line_dsc.p1.y = obj_y1 + cy - dy;
+            line_dsc.p2.x = obj_x1 + cx + dx;
+            line_dsc.p2.y = obj_y1 + cy + dy;
+            lv_draw_line(layer, &line_dsc);
         }
     }
-
-    draw_ctx->clip_area = orig_clip;
 }
 
 static void timer_cb(lv_timer_t *timer) {
