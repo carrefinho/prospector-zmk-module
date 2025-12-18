@@ -15,6 +15,13 @@ static sys_slist_t widgets = SYS_SLIST_STATIC_INIT(&widgets);
 
 #define PROFILE_DISPLAY_TIMEOUT K_SECONDS(3)
 
+#define NUM_ACTIVE       0xffffff
+#define NUM_INACTIVE     0xa0a0a0
+#define SYM_SENDING      0x00ffff
+#define SYM_CONNECTED    0x63c0c0
+#define SYM_SEARCHING    0xd0d0d0
+#define SYM_UNPAIRED     0x454545
+
 static void profile_display_timeout_handler(struct k_work *work);
 static K_WORK_DELAYABLE_DEFINE(profile_display_timeout_work, profile_display_timeout_handler);
 
@@ -27,100 +34,67 @@ static void profile_display_timeout_handler(struct k_work *work) {
     }
 }
 
-static void fade_out_cb(lv_anim_t *anim) {
-    lv_obj_t *obj = anim->var;
-    lv_obj_add_flag(obj, LV_OBJ_FLAG_HIDDEN);
+static void set_symbol_opa(void *obj, int32_t opa) {
+    lv_obj_set_style_opa(obj, opa, LV_PART_MAIN);
 }
 
-static void update_profile_indicator(struct zmk_widget_output *widget, uint8_t profile_index) {
+static void start_breathing_anim(lv_obj_t *obj) {
+    lv_anim_delete(obj, NULL);
+
+    lv_anim_t anim;
+    lv_anim_init(&anim);
+    lv_anim_set_var(&anim, obj);
+    lv_anim_set_values(&anim, 155, 255);
+    lv_anim_set_duration(&anim, 500);
+    lv_anim_set_exec_cb(&anim, set_symbol_opa);
+    lv_anim_set_path_cb(&anim, lv_anim_path_ease_in_out);
+    lv_anim_set_playback_duration(&anim, 500);
+    lv_anim_set_repeat_count(&anim, LV_ANIM_REPEAT_INFINITE);
+    lv_anim_start(&anim);
+}
+
+static void stop_breathing_anim(lv_obj_t *obj) {
+    lv_anim_delete(obj, NULL);
+    lv_obj_remove_local_style_prop(obj, LV_STYLE_OPA, LV_PART_MAIN);
+}
+
+static void update_output_widget(struct zmk_widget_output *widget, uint8_t profile_index) {
     char profile_text[4];
     snprintf(profile_text, sizeof(profile_text), "%d", profile_index);
     lv_label_set_text(widget->profile_label, profile_text);
 
     bool is_connected = zmk_ble_profile_is_connected(profile_index);
     bool is_open = zmk_ble_profile_is_open(profile_index);
-    bool is_sending = (active_transport == ZMK_TRANSPORT_BLE);
+    bool is_ble_active = (active_transport == ZMK_TRANSPORT_BLE);
 
-    bool circle_was_visible = !lv_obj_has_flag(widget->profile_circle, LV_OBJ_FLAG_HIDDEN);
-    bool spinner_was_visible = !lv_obj_has_flag(widget->profile_spinner, LV_OBJ_FLAG_HIDDEN);
+    lv_label_set_text(widget->links_label, SYMBOL_WAVES_UP);
+    stop_breathing_anim(widget->links_label);
 
     if (is_connected) {
-        if (spinner_was_visible) {
-            lv_anim_t anim_out;
-            lv_anim_init(&anim_out);
-            lv_anim_set_var(&anim_out, widget->profile_spinner);
-            lv_anim_set_values(&anim_out, 255, 0);
-            lv_anim_set_time(&anim_out, 150);
-            lv_anim_set_exec_cb(&anim_out, (lv_anim_exec_xcb_t)lv_obj_set_style_opa);
-            lv_anim_set_path_cb(&anim_out, lv_anim_path_ease_in);
-            lv_anim_set_ready_cb(&anim_out, fade_out_cb);
-            lv_anim_start(&anim_out);
+        if (is_ble_active) {
+            lv_obj_set_style_text_font(widget->links_label, &Symbols_Bold_26, LV_PART_MAIN);
+            lv_obj_set_style_text_color(widget->links_label, lv_color_hex(SYM_SENDING), LV_PART_MAIN);
+            lv_obj_set_style_text_color(widget->profile_label, lv_color_hex(NUM_ACTIVE), LV_PART_MAIN);
+            lv_obj_set_style_translate_y(widget->links_label, 2, LV_PART_MAIN);
         } else {
-            lv_obj_add_flag(widget->profile_spinner, LV_OBJ_FLAG_HIDDEN);
-        }
-
-        lv_obj_set_style_arc_color(widget->profile_circle, lv_color_hex(0xffffff), LV_PART_MAIN);
-        lv_obj_set_style_arc_color(widget->profile_circle, lv_color_hex(0xffffff), LV_PART_INDICATOR);
-        if (is_sending) {
-            lv_obj_set_style_bg_color(widget->profile_circle, lv_color_hex(0xffffff), LV_PART_MAIN);
-        } else {
-            lv_obj_set_style_bg_color(widget->profile_circle, lv_color_hex(0x000000), LV_PART_MAIN);
-        }
-
-        lv_obj_clear_flag(widget->profile_circle, LV_OBJ_FLAG_HIDDEN);
-
-        if (spinner_was_visible) {
-            lv_obj_set_style_opa(widget->profile_circle, 0, 0);
-            lv_anim_t anim_in;
-            lv_anim_init(&anim_in);
-            lv_anim_set_var(&anim_in, widget->profile_circle);
-            lv_anim_set_values(&anim_in, 0, 255);
-            lv_anim_set_time(&anim_in, 150);
-            lv_anim_set_delay(&anim_in, 150);
-            lv_anim_set_exec_cb(&anim_in, (lv_anim_exec_xcb_t)lv_obj_set_style_opa);
-            lv_anim_set_path_cb(&anim_in, lv_anim_path_ease_out);
-            lv_anim_start(&anim_in);
-        } else {
-            lv_obj_set_style_opa(widget->profile_circle, 255, 0);
+            lv_obj_set_style_text_font(widget->links_label, &Symbols_Regular_28, LV_PART_MAIN);
+            lv_obj_set_style_text_color(widget->links_label, lv_color_hex(SYM_CONNECTED), LV_PART_MAIN);
+            lv_obj_set_style_text_color(widget->profile_label, lv_color_hex(NUM_INACTIVE), LV_PART_MAIN);
+            lv_obj_set_style_translate_y(widget->links_label, 0, LV_PART_MAIN);
         }
     } else {
-        if (circle_was_visible) {
-            lv_anim_t anim_out;
-            lv_anim_init(&anim_out);
-            lv_anim_set_var(&anim_out, widget->profile_circle);
-            lv_anim_set_values(&anim_out, 255, 0);
-            lv_anim_set_time(&anim_out, 150);
-            lv_anim_set_exec_cb(&anim_out, (lv_anim_exec_xcb_t)lv_obj_set_style_opa);
-            lv_anim_set_path_cb(&anim_out, lv_anim_path_ease_in);
-            lv_anim_set_ready_cb(&anim_out, fade_out_cb);
-            lv_anim_start(&anim_out);
+        lv_obj_set_style_text_font(widget->links_label, &Symbols_Regular_28, LV_PART_MAIN);
+        lv_obj_set_style_translate_y(widget->links_label, 0, LV_PART_MAIN);
+        lv_obj_set_style_text_color(widget->profile_label, lv_color_hex(NUM_INACTIVE), LV_PART_MAIN);
+        if (is_open) {
+            lv_obj_set_style_text_color(widget->links_label, lv_color_hex(SYM_UNPAIRED), LV_PART_MAIN);
         } else {
-            lv_obj_add_flag(widget->profile_circle, LV_OBJ_FLAG_HIDDEN);
-        }
-
-        uint32_t color = is_open ? 0xffff00 : 0xffffff;
-        lv_obj_set_style_arc_color(widget->profile_spinner, lv_color_hex(color), LV_PART_MAIN);
-        lv_obj_set_style_arc_color(widget->profile_spinner, lv_color_hex(color), LV_PART_INDICATOR);
-
-        lv_obj_clear_flag(widget->profile_spinner, LV_OBJ_FLAG_HIDDEN);
-
-        if (circle_was_visible) {
-            lv_obj_set_style_opa(widget->profile_spinner, 0, 0);
-            lv_anim_t anim_in;
-            lv_anim_init(&anim_in);
-            lv_anim_set_var(&anim_in, widget->profile_spinner);
-            lv_anim_set_values(&anim_in, 0, 255);
-            lv_anim_set_time(&anim_in, 150);
-            lv_anim_set_delay(&anim_in, 150);
-            lv_anim_set_exec_cb(&anim_in, (lv_anim_exec_xcb_t)lv_obj_set_style_opa);
-            lv_anim_set_path_cb(&anim_in, lv_anim_path_ease_out);
-            lv_anim_start(&anim_in);
-        } else {
-            lv_obj_set_style_opa(widget->profile_spinner, 255, 0);
+            lv_obj_set_style_text_color(widget->links_label, lv_color_hex(SYM_SEARCHING), LV_PART_MAIN);
+            start_breathing_anim(widget->links_label);
         }
     }
 
-    lv_obj_set_style_text_color(widget->profile_label, lv_color_hex(0xffffff), LV_PART_MAIN);
+    lv_obj_invalidate(widget->container);
 }
 
 static int endpoint_changed_listener(const zmk_event_t *eh) {
@@ -133,12 +107,13 @@ static int endpoint_changed_listener(const zmk_event_t *eh) {
             k_work_cancel_delayable(&profile_display_timeout_work);
             zmk_widget_modifier_indicator_set_compact(true);
         } else {
-            zmk_widget_modifier_indicator_set_compact(false);
+            zmk_widget_modifier_indicator_set_compact(true);
+            k_work_reschedule(&profile_display_timeout_work, PROFILE_DISPLAY_TIMEOUT);
         }
 
         struct zmk_widget_output *widget;
         SYS_SLIST_FOR_EACH_CONTAINER(&widgets, widget, node) {
-            update_profile_indicator(widget, active_profile_index);
+            update_output_widget(widget, active_profile_index);
         }
     }
     return ZMK_EV_EVENT_BUBBLE;
@@ -154,7 +129,7 @@ static int ble_active_profile_changed_listener(const zmk_event_t *eh) {
 
         struct zmk_widget_output *widget;
         SYS_SLIST_FOR_EACH_CONTAINER(&widgets, widget, node) {
-            update_profile_indicator(widget, active_profile_index);
+            update_output_widget(widget, active_profile_index);
         }
     }
     return ZMK_EV_EVENT_BUBBLE;
@@ -167,31 +142,26 @@ ZMK_LISTENER(widget_output_profile, ble_active_profile_changed_listener);
 ZMK_SUBSCRIPTION(widget_output_profile, zmk_ble_active_profile_changed);
 
 int zmk_widget_output_init(struct zmk_widget_output *widget, lv_obj_t *parent) {
-    widget->profile_label = lv_label_create(parent);
-    lv_obj_set_style_text_font(widget->profile_label, &Symbols_Semibold_32, LV_PART_MAIN);
-    lv_obj_align(widget->profile_label, LV_ALIGN_TOP_RIGHT, -22, -5);
+    widget->container = lv_obj_create(parent);
+    lv_obj_set_size(widget->container, 108, 30);
+    // lv_obj_set_style_bg_color(widget->container, lv_color_hex(0x202020), LV_PART_MAIN);
+    // lv_obj_set_style_bg_opa(widget->container, 255, LV_PART_MAIN);
+    lv_obj_set_style_border_width(widget->container, 0, LV_PART_MAIN);
+    lv_obj_set_style_pad_all(widget->container, 0, LV_PART_MAIN);
 
-    widget->profile_circle = lv_arc_create(parent);
-    lv_obj_set_size(widget->profile_circle, 24, 24);
-    lv_arc_set_rotation(widget->profile_circle, 0);
-    lv_arc_set_bg_angles(widget->profile_circle, 0, 360);
-    lv_arc_set_angles(widget->profile_circle, 0, 360);
-    lv_obj_set_style_arc_width(widget->profile_circle, 4, LV_PART_MAIN);
-    lv_obj_set_style_arc_width(widget->profile_circle, 4, LV_PART_INDICATOR);
-    lv_obj_set_style_radius(widget->profile_circle, LV_RADIUS_CIRCLE, LV_PART_MAIN);
-    lv_obj_set_style_bg_color(widget->profile_circle, lv_color_hex(0x000000), LV_PART_MAIN);
-    lv_obj_set_style_bg_opa(widget->profile_circle, 255, LV_PART_MAIN);
-    lv_obj_remove_style(widget->profile_circle, NULL, LV_PART_KNOB);
-    lv_obj_clear_flag(widget->profile_circle, LV_OBJ_FLAG_CLICKABLE);
-    lv_obj_align(widget->profile_circle, LV_ALIGN_TOP_RIGHT, -48, 0);
+    widget->links_label = lv_label_create(widget->container);
+    lv_obj_set_size(widget->links_label, 30, 30);
+    lv_obj_set_style_text_font(widget->links_label, &Symbols_Regular_28, LV_PART_MAIN);
+    lv_obj_set_style_text_color(widget->links_label, lv_color_hex(NUM_INACTIVE), LV_PART_MAIN);
+    lv_obj_set_style_text_align(widget->links_label, LV_TEXT_ALIGN_CENTER, LV_PART_MAIN);
+    lv_obj_set_pos(widget->links_label, 19, -1);
 
-    widget->profile_spinner = lv_spinner_create(parent);
-    lv_spinner_set_anim_params(widget->profile_spinner, 1000, 90);
-    lv_obj_set_size(widget->profile_spinner, 24, 24);
-    lv_obj_set_style_arc_width(widget->profile_spinner, 4, LV_PART_MAIN);
-    lv_obj_set_style_arc_width(widget->profile_spinner, 4, LV_PART_INDICATOR);
-    lv_obj_set_style_arc_opa(widget->profile_spinner, 0, LV_PART_MAIN);
-    lv_obj_align(widget->profile_spinner, LV_ALIGN_TOP_RIGHT, -48, 0);
+    widget->profile_label = lv_label_create(widget->container);
+    lv_obj_set_size(widget->profile_label, 30, 30);
+    lv_obj_set_style_text_font(widget->profile_label, &Symbols_Semibold_28, LV_PART_MAIN);
+    lv_obj_set_style_text_color(widget->profile_label, lv_color_hex(NUM_INACTIVE), LV_PART_MAIN);
+    lv_obj_set_style_text_align(widget->profile_label, LV_TEXT_ALIGN_CENTER, LV_PART_MAIN);
+    lv_obj_set_pos(widget->profile_label, 54, 1);
 
     if (sys_slist_is_empty(&widgets)) {
         active_profile_index = zmk_ble_active_profile_index();
@@ -203,7 +173,7 @@ int zmk_widget_output_init(struct zmk_widget_output *widget, lv_obj_t *parent) {
         }
     }
 
-    update_profile_indicator(widget, active_profile_index);
+    update_output_widget(widget, active_profile_index);
 
     sys_slist_append(&widgets, &widget->node);
 
@@ -211,5 +181,5 @@ int zmk_widget_output_init(struct zmk_widget_output *widget, lv_obj_t *parent) {
 }
 
 lv_obj_t *zmk_widget_output_obj(struct zmk_widget_output *widget) {
-    return widget->profile_label;
+    return widget->container;
 }

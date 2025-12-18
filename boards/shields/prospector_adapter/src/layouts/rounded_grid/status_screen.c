@@ -29,6 +29,7 @@ lv_obj_t *zmk_display_status_screen() {
     lv_obj_set_pos(zmk_widget_layer_indicator_obj(&layer_indicator_widget), 14, 20);
 
     zmk_widget_output_init(&output_widget, screen);
+    lv_obj_align(zmk_widget_output_obj(&output_widget), LV_ALIGN_TOP_RIGHT, 0, 0);
 
     zmk_widget_modifier_indicator_init(&modifier_indicator_widget, screen);
     lv_obj_align(zmk_widget_modifier_indicator_obj(&modifier_indicator_widget), LV_ALIGN_BOTTOM_RIGHT, 0, -62);
