@@ -12,6 +12,90 @@
 
 static sys_slist_t widgets = SYS_SLIST_STATIC_INIT(&widgets);
 
+#define LOW_BATTERY_THRESHOLD 20
+#define ARC_WIDTH_CONNECTED 5
+#define ARC_WIDTH_DISCONNECTED 2
+#define ARC_WIDTH_ANIM_DURATION 200
+
+static uint8_t peripheral_battery[ZMK_SPLIT_BLE_PERIPHERAL_COUNT] = {0};
+static bool peripheral_connected[ZMK_SPLIT_BLE_PERIPHERAL_COUNT] = {false};
+
+static lv_style_t style_arc_ring_disconnected;
+static lv_style_t style_arc_ring_connected;
+static lv_style_t style_arc_ring_low;
+static lv_style_t style_arc_ind_disconnected;
+static lv_style_t style_arc_ind_connected;
+static lv_style_t style_arc_ind_low;
+static lv_style_t style_label_box_disconnected;
+static lv_style_t style_label_box_connected;
+static lv_style_t style_label_box_low;
+static lv_style_t style_label_disconnected;
+static lv_style_t style_label_connected;
+static bool styles_initialized = false;
+
+static void init_styles(void) {
+    if (styles_initialized) {
+        return;
+    }
+
+    lv_style_init(&style_arc_ring_disconnected);
+    lv_style_set_arc_color(&style_arc_ring_disconnected, lv_color_hex(DISPLAY_COLOR_BATTERY_DISCONNECTED_RING));
+
+    lv_style_init(&style_arc_ring_connected);
+    lv_style_set_arc_color(&style_arc_ring_connected, lv_color_hex(DISPLAY_COLOR_BATTERY_RING));
+
+    lv_style_init(&style_arc_ring_low);
+    lv_style_set_arc_color(&style_arc_ring_low, lv_color_hex(DISPLAY_COLOR_BATTERY_LOW_RING));
+
+    lv_style_init(&style_arc_ind_disconnected);
+    lv_style_set_arc_color(&style_arc_ind_disconnected, lv_color_hex(DISPLAY_COLOR_BATTERY_DISCONNECTED_FILL));
+
+    lv_style_init(&style_arc_ind_connected);
+    lv_style_set_arc_color(&style_arc_ind_connected, lv_color_hex(DISPLAY_COLOR_BATTERY_FILL));
+
+    lv_style_init(&style_arc_ind_low);
+    lv_style_set_arc_color(&style_arc_ind_low, lv_color_hex(DISPLAY_COLOR_BATTERY_LOW_FILL));
+
+    lv_style_init(&style_label_box_disconnected);
+    lv_style_set_bg_color(&style_label_box_disconnected, lv_color_hex(DISPLAY_COLOR_BATTERY_DISCONNECTED_FILL));
+
+    lv_style_init(&style_label_box_connected);
+    lv_style_set_bg_color(&style_label_box_connected, lv_color_hex(DISPLAY_COLOR_BATTERY_FILL));
+
+    lv_style_init(&style_label_box_low);
+    lv_style_set_bg_color(&style_label_box_low, lv_color_hex(DISPLAY_COLOR_BATTERY_LOW_FILL));
+
+    lv_style_init(&style_label_disconnected);
+    lv_style_set_text_color(&style_label_disconnected, lv_color_hex(DISPLAY_COLOR_BATTERY_DISCONNECTED_LABEL));
+
+    lv_style_init(&style_label_connected);
+    lv_style_set_text_color(&style_label_connected, lv_color_hex(0x000000));
+
+    styles_initialized = true;
+}
+
+static void arc_width_anim_cb(void *var, int32_t value) {
+    lv_obj_t *arc = (lv_obj_t *)var;
+    lv_obj_set_style_arc_width(arc, value, LV_PART_MAIN);
+    lv_obj_set_style_arc_width(arc, value, LV_PART_INDICATOR);
+}
+
+static void animate_arc_width(lv_obj_t *arc, int32_t target_width) {
+    int32_t current_width = lv_obj_get_style_arc_width(arc, LV_PART_MAIN);
+    if (current_width == target_width) {
+        return;
+    }
+
+    lv_anim_t anim;
+    lv_anim_init(&anim);
+    lv_anim_set_var(&anim, arc);
+    lv_anim_set_values(&anim, current_width, target_width);
+    lv_anim_set_time(&anim, ARC_WIDTH_ANIM_DURATION);
+    lv_anim_set_exec_cb(&anim, arc_width_anim_cb);
+    lv_anim_set_path_cb(&anim, lv_anim_path_ease_out);
+    lv_anim_start(&anim);
+}
+
 struct battery_update_state {
     uint8_t source;
     uint8_t level;
@@ -21,6 +105,72 @@ struct connection_update_state {
     uint8_t source;
     bool connected;
 };
+
+static void update_battery_circle_colors(lv_obj_t *widget_obj, uint8_t source) {
+    if (source >= ZMK_SPLIT_BLE_PERIPHERAL_COUNT) {
+        return;
+    }
+
+    lv_obj_t *arc = lv_obj_get_child(widget_obj, source);
+    if (!arc) {
+        return;
+    }
+
+    lv_obj_t *label_box = lv_obj_get_child(arc, 0);
+    lv_obj_t *label = label_box ? lv_obj_get_child(label_box, 0) : NULL;
+
+    bool connected = peripheral_connected[source];
+    uint8_t level = peripheral_battery[source];
+    bool low_battery = connected && level > 0 && level <= LOW_BATTERY_THRESHOLD;
+
+    lv_obj_remove_style(arc, &style_arc_ring_disconnected, LV_PART_MAIN);
+    lv_obj_remove_style(arc, &style_arc_ring_connected, LV_PART_MAIN);
+    lv_obj_remove_style(arc, &style_arc_ring_low, LV_PART_MAIN);
+    lv_obj_remove_style(arc, &style_arc_ind_disconnected, LV_PART_INDICATOR);
+    lv_obj_remove_style(arc, &style_arc_ind_connected, LV_PART_INDICATOR);
+    lv_obj_remove_style(arc, &style_arc_ind_low, LV_PART_INDICATOR);
+    if (label_box) {
+        lv_obj_remove_style(label_box, &style_label_box_disconnected, LV_PART_MAIN);
+        lv_obj_remove_style(label_box, &style_label_box_connected, LV_PART_MAIN);
+        lv_obj_remove_style(label_box, &style_label_box_low, LV_PART_MAIN);
+    }
+    if (label) {
+        lv_obj_remove_style(label, &style_label_disconnected, LV_PART_MAIN);
+        lv_obj_remove_style(label, &style_label_connected, LV_PART_MAIN);
+    }
+
+    if (!connected) {
+        animate_arc_width(arc, ARC_WIDTH_DISCONNECTED);
+        lv_obj_add_style(arc, &style_arc_ring_disconnected, LV_PART_MAIN);
+        lv_obj_add_style(arc, &style_arc_ind_disconnected, LV_PART_INDICATOR);
+        if (label_box) {
+            lv_obj_add_style(label_box, &style_label_box_disconnected, LV_PART_MAIN);
+        }
+        if (label) {
+            lv_obj_add_style(label, &style_label_disconnected, LV_PART_MAIN);
+        }
+    } else if (low_battery) {
+        animate_arc_width(arc, ARC_WIDTH_CONNECTED);
+        lv_obj_add_style(arc, &style_arc_ring_low, LV_PART_MAIN);
+        lv_obj_add_style(arc, &style_arc_ind_low, LV_PART_INDICATOR);
+        if (label_box) {
+            lv_obj_add_style(label_box, &style_label_box_low, LV_PART_MAIN);
+        }
+        if (label) {
+            lv_obj_add_style(label, &style_label_connected, LV_PART_MAIN);
+        }
+    } else {
+        animate_arc_width(arc, ARC_WIDTH_CONNECTED);
+        lv_obj_add_style(arc, &style_arc_ring_connected, LV_PART_MAIN);
+        lv_obj_add_style(arc, &style_arc_ind_connected, LV_PART_INDICATOR);
+        if (label_box) {
+            lv_obj_add_style(label_box, &style_label_box_connected, LV_PART_MAIN);
+        }
+        if (label) {
+            lv_obj_add_style(label, &style_label_connected, LV_PART_MAIN);
+        }
+    }
+}
 
 static void set_battery_circle_value(lv_obj_t *widget_obj, struct battery_update_state state, bool is_initialized) {
     if (!is_initialized || state.source >= ZMK_SPLIT_BLE_PERIPHERAL_COUNT) {
@@ -32,7 +182,9 @@ static void set_battery_circle_value(lv_obj_t *widget_obj, struct battery_update
         return;
     }
 
+    peripheral_battery[state.source] = state.level;
     lv_arc_set_value(arc, state.level);
+    update_battery_circle_colors(widget_obj, state.source);
 }
 
 static void set_battery_circle_connected(lv_obj_t *widget_obj, struct connection_update_state state, bool is_initialized) {
@@ -40,16 +192,8 @@ static void set_battery_circle_connected(lv_obj_t *widget_obj, struct connection
         return;
     }
 
-    lv_obj_t *arc = lv_obj_get_child(widget_obj, state.source);
-    if (!arc) {
-        return;
-    }
-
-    if (state.connected) {
-        lv_obj_set_style_arc_color(arc, lv_color_hex(DISPLAY_COLOR_BATTERY_FILL), LV_PART_INDICATOR);
-    } else {
-        lv_obj_set_style_arc_color(arc, lv_color_hex(DISPLAY_COLOR_BATTERY_RING), LV_PART_INDICATOR);
-    }
+    peripheral_connected[state.source] = state.connected;
+    update_battery_circle_colors(widget_obj, state.source);
 }
 
 void battery_circles_battery_update_cb(struct battery_update_state state) {
@@ -109,6 +253,8 @@ ZMK_DISPLAY_WIDGET_LISTENER(widget_battery_circles_connection, struct connection
 ZMK_SUBSCRIPTION(widget_battery_circles_connection, zmk_split_central_status_changed);
 
 int zmk_widget_battery_circles_init(struct zmk_widget_battery_circles *widget, lv_obj_t *parent) {
+    init_styles();
+
     widget->obj = lv_obj_create(parent);
     lv_obj_set_size(widget->obj, 132, 62);
     lv_obj_set_style_bg_opa(widget->obj, LV_OPA_TRANSP, LV_PART_MAIN);
@@ -123,37 +269,37 @@ int zmk_widget_battery_circles_init(struct zmk_widget_battery_circles *widget, l
         lv_obj_t *arc = lv_arc_create(widget->obj);
 
         lv_obj_set_size(arc, arc_size, arc_size);
-        lv_obj_set_pos(arc, i * spacing - 2, y_center);
+        lv_obj_set_pos(arc, i * spacing, y_center);
 
         lv_arc_set_range(arc, 0, 100);
         lv_arc_set_value(arc, 0);
         lv_arc_set_bg_angles(arc, 270, 180);
         lv_arc_set_rotation(arc, 0);
 
-        lv_obj_set_style_arc_width(arc, 6, LV_PART_MAIN);
-        lv_obj_set_style_arc_color(arc, lv_color_hex(DISPLAY_COLOR_BATTERY_RING), LV_PART_MAIN);
-        lv_obj_set_style_arc_rounded(arc, true, LV_PART_MAIN);
-
-        lv_obj_set_style_arc_width(arc, 6, LV_PART_INDICATOR);
-        lv_obj_set_style_arc_color(arc, lv_color_hex(DISPLAY_COLOR_BATTERY_FILL), LV_PART_INDICATOR);
-        lv_obj_set_style_arc_rounded(arc, true, LV_PART_INDICATOR);
+        lv_obj_set_style_arc_width(arc, ARC_WIDTH_DISCONNECTED, LV_PART_MAIN);
+        lv_obj_set_style_arc_width(arc, ARC_WIDTH_DISCONNECTED, LV_PART_INDICATOR);
+        lv_obj_add_style(arc, &style_arc_ring_disconnected, LV_PART_MAIN);
+        lv_obj_add_style(arc, &style_arc_ind_disconnected, LV_PART_INDICATOR);
 
         lv_obj_remove_style(arc, NULL, LV_PART_KNOB);
         lv_obj_clear_flag(arc, LV_OBJ_FLAG_CLICKABLE);
 
-        lv_obj_t *label = lv_label_create(arc);
+        lv_obj_t *label_box = lv_obj_create(arc);
+        lv_obj_set_size(label_box, 24, 24);
+        lv_obj_set_pos(label_box, 0, 0);
+        lv_obj_set_style_bg_opa(label_box, LV_OPA_COVER, LV_PART_MAIN);
+        lv_obj_set_style_radius(label_box, 2, LV_PART_MAIN);
+        lv_obj_set_style_border_width(label_box, 0, LV_PART_MAIN);
+        lv_obj_set_style_pad_all(label_box, 0, LV_PART_MAIN);
+        lv_obj_add_style(label_box, &style_label_box_disconnected, LV_PART_MAIN);
+
+        lv_obj_t *label = lv_label_create(label_box);
         char label_text[2];
         snprintf(label_text, sizeof(label_text), "%d", i + 1);
         lv_label_set_text(label, label_text);
-        lv_obj_set_size(label, 24, 24);
-        lv_obj_set_pos(label, 0, 0);
         lv_obj_set_style_text_font(label, &FG_Medium_20, LV_PART_MAIN);
-        lv_obj_set_style_text_color(label, lv_color_hex(0x000000), LV_PART_MAIN);
-        lv_obj_set_style_text_align(label, LV_TEXT_ALIGN_CENTER, LV_PART_MAIN);
-        lv_obj_set_style_bg_color(label, lv_color_hex(DISPLAY_COLOR_BATTERY_FILL), LV_PART_MAIN);
-        lv_obj_set_style_bg_opa(label, LV_OPA_COVER, LV_PART_MAIN);
-        lv_obj_set_style_radius(label, 2, LV_PART_MAIN);
-        lv_obj_set_style_pad_top(label, 2, LV_PART_MAIN);
+        lv_obj_add_style(label, &style_label_disconnected, LV_PART_MAIN);
+        lv_obj_align(label, LV_ALIGN_CENTER, 0, 0);
     }
 
     widget_battery_circles_battery_init();

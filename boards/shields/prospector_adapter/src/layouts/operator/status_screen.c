@@ -29,7 +29,7 @@ lv_obj_t *zmk_display_status_screen() {
     lv_obj_set_pos(zmk_widget_layer_display_obj(&layer_display_widget), 10, 142);
 
     zmk_widget_battery_circles_init(&battery_circles_widget, screen);
-    lv_obj_set_pos(zmk_widget_battery_circles_obj(&battery_circles_widget), 13, 170);
+    lv_obj_set_pos(zmk_widget_battery_circles_obj(&battery_circles_widget), 11, 170);
 
     zmk_widget_output_init(&output_widget, screen);
     lv_obj_set_pos(zmk_widget_output_obj(&output_widget), 148, 170);
