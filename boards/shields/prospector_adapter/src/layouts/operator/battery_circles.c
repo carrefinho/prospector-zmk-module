@@ -139,6 +139,16 @@ static void update_battery_circle_colors(lv_obj_t *widget_obj, uint8_t source) {
         lv_obj_remove_style(label, &style_label_connected, LV_PART_MAIN);
     }
 
+    if (label) {
+        char label_text[4];
+        if (connected && level > 0) {
+            snprintf(label_text, sizeof(label_text), "%d", level);
+        } else {
+            snprintf(label_text, sizeof(label_text), "-");
+        }
+        lv_label_set_text(label, label_text);
+    }
+
     if (!connected) {
         animate_arc_width(arc, ARC_WIDTH_DISCONNECTED);
         lv_obj_add_style(arc, &style_arc_ring_disconnected, LV_PART_MAIN);
@@ -285,7 +295,7 @@ int zmk_widget_battery_circles_init(struct zmk_widget_battery_circles *widget, l
         lv_obj_clear_flag(arc, LV_OBJ_FLAG_CLICKABLE);
 
         lv_obj_t *label_box = lv_obj_create(arc);
-        lv_obj_set_size(label_box, 24, 24);
+        lv_obj_set_size(label_box, 25, 25);
         lv_obj_set_pos(label_box, 0, 0);
         lv_obj_set_style_bg_opa(label_box, LV_OPA_COVER, LV_PART_MAIN);
         lv_obj_set_style_radius(label_box, 2, LV_PART_MAIN);
@@ -294,10 +304,9 @@ int zmk_widget_battery_circles_init(struct zmk_widget_battery_circles *widget, l
         lv_obj_add_style(label_box, &style_label_box_disconnected, LV_PART_MAIN);
 
         lv_obj_t *label = lv_label_create(label_box);
-        char label_text[2];
-        snprintf(label_text, sizeof(label_text), "%d", i + 1);
-        lv_label_set_text(label, label_text);
-        lv_obj_set_style_text_font(label, &FG_Medium_20, LV_PART_MAIN);
+        lv_label_set_text(label, "-");
+        lv_obj_set_style_text_font(label, &DINish_Medium_24, LV_PART_MAIN);
+        lv_obj_set_style_text_letter_space(label, -1, LV_PART_MAIN);
         lv_obj_add_style(label, &style_label_disconnected, LV_PART_MAIN);
         lv_obj_align(label, LV_ALIGN_CENTER, 0, 0);
     }

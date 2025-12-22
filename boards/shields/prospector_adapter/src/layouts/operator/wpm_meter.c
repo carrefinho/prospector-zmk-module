@@ -187,7 +187,7 @@ int zmk_widget_wpm_meter_init(struct zmk_widget_wpm_meter *widget, lv_obj_t *par
     lv_obj_set_style_bg_opa(widget->wpm_label, LV_OPA_COVER, LV_PART_MAIN);
     lv_obj_set_style_pad_hor(widget->wpm_label, 6, LV_PART_MAIN);
     lv_obj_set_style_pad_ver(widget->wpm_label, 4, LV_PART_MAIN);
-    lv_obj_align(widget->wpm_label, LV_ALIGN_TOP_LEFT, -7, -10);
+    lv_obj_align(widget->wpm_label, LV_ALIGN_TOP_LEFT, -7, -9);
 
     widget->layer_label = lv_label_create(widget->obj);
     lv_label_set_text(widget->layer_label, "");
@@ -197,7 +197,7 @@ int zmk_widget_wpm_meter_init(struct zmk_widget_wpm_meter *widget, lv_obj_t *par
     lv_obj_set_style_bg_opa(widget->layer_label, LV_OPA_COVER, LV_PART_MAIN);
     lv_obj_set_style_pad_hor(widget->layer_label, 8, LV_PART_MAIN);
     lv_obj_set_style_pad_ver(widget->layer_label, 3, LV_PART_MAIN);
-    lv_obj_align(widget->layer_label, LV_ALIGN_BOTTOM_RIGHT, 9, 8);
+    lv_obj_align(widget->layer_label, LV_ALIGN_BOTTOM_RIGHT, 9, 7);
 
     sys_slist_append(&widgets, &widget->node);
     widget_wpm_meter_init();
