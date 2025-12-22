@@ -6,6 +6,8 @@
 #include "layouts/rounded_grid/status_screen.c"
 #elif defined(CONFIG_PROSPECTOR_STATUS_SCREEN_WIND_MAP)
 #include "layouts/wind_map/status_screen.c"
+#elif defined(CONFIG_PROSPECTOR_STATUS_SCREEN_OPERATOR)
+#include "layouts/operator/status_screen.c"
 #else
 #error "No status screen layout selected"
 #endif

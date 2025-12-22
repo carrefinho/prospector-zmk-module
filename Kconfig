@@ -17,6 +17,11 @@ config PROSPECTOR_STATUS_SCREEN_WIND_MAP
     help
         Status screen centered around wind map style WPM visualization
 
+config PROSPECTOR_STATUS_SCREEN_OPERATOR
+    bool "Operator layout"
+    help
+        HUD-style status screen with WPM bar graph, modifiers, and profile slots
+
 endchoice
 
 config PROSPECTOR_ROTATE_DISPLAY_180
