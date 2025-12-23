@@ -16,6 +16,7 @@ static sys_slist_t widgets = SYS_SLIST_STATIC_INIT(&widgets);
 #define ARC_WIDTH_CONNECTED 5
 #define ARC_WIDTH_DISCONNECTED 2
 #define ARC_WIDTH_ANIM_DURATION 200
+#define ARC_VALUE_ANIM_DURATION 300
 
 static uint8_t peripheral_battery[ZMK_SPLIT_BLE_PERIPHERAL_COUNT] = {0};
 static bool peripheral_connected[ZMK_SPLIT_BLE_PERIPHERAL_COUNT] = {false};
@@ -74,6 +75,38 @@ static void init_styles(void) {
     styles_initialized = true;
 }
 
+static float cubic_bezier_y(float t, float y1, float y2) {
+    float mt = 1.0f - t;
+    return 3.0f * mt * mt * t * y1 + 3.0f * mt * t * t * y2 + t * t * t;
+}
+
+static float cubic_bezier_x(float t, float x1, float x2) {
+    float mt = 1.0f - t;
+    return 3.0f * mt * mt * t * x1 + 3.0f * mt * t * t * x2 + t * t * t;
+}
+
+static float cubic_bezier_solve(float x, float x1, float x2) {
+    float t = x;
+    for (int i = 0; i < 8; i++) {
+        float x_est = cubic_bezier_x(t, x1, x2);
+        float dx = x - x_est;
+        if (dx > -0.001f && dx < 0.001f) break;
+        float mt = 1.0f - t;
+        float slope = 3.0f * mt * mt * x1 + 6.0f * mt * t * (x2 - x1) + 3.0f * t * t * (1.0f - x2);
+        if (slope < 0.001f && slope > -0.001f) break;
+        t += dx / slope;
+    }
+    return t;
+}
+
+static int32_t lv_anim_path_bezier_battery(const lv_anim_t *a) {
+    float x = (float)a->act_time / (float)a->duration;
+    float t = cubic_bezier_solve(x, 0.00f, 0.30f);
+    float y = cubic_bezier_y(t, 0.70f, 1.00f);
+    int32_t diff = a->end_value - a->start_value;
+    return a->start_value + (int32_t)(diff * y);
+}
+
 static void arc_width_anim_cb(void *var, int32_t value) {
     lv_obj_t *arc = (lv_obj_t *)var;
     lv_obj_set_style_arc_width(arc, value, LV_PART_MAIN);
@@ -93,6 +126,27 @@ static void animate_arc_width(lv_obj_t *arc, int32_t target_width) {
     lv_anim_set_time(&anim, ARC_WIDTH_ANIM_DURATION);
     lv_anim_set_exec_cb(&anim, arc_width_anim_cb);
     lv_anim_set_path_cb(&anim, lv_anim_path_ease_out);
+    lv_anim_start(&anim);
+}
+
+static void arc_value_anim_cb(void *var, int32_t value) {
+    lv_obj_t *arc = (lv_obj_t *)var;
+    lv_arc_set_value(arc, value);
+}
+
+static void animate_arc_value(lv_obj_t *arc, int32_t target_value) {
+    int32_t current_value = lv_arc_get_value(arc);
+    if (current_value == target_value) {
+        return;
+    }
+
+    lv_anim_t anim;
+    lv_anim_init(&anim);
+    lv_anim_set_var(&anim, arc);
+    lv_anim_set_values(&anim, current_value, target_value);
+    lv_anim_set_time(&anim, ARC_VALUE_ANIM_DURATION);
+    lv_anim_set_exec_cb(&anim, arc_value_anim_cb);
+    lv_anim_set_path_cb(&anim, lv_anim_path_bezier_battery);
     lv_anim_start(&anim);
 }
 
@@ -193,7 +247,7 @@ static void set_battery_circle_value(lv_obj_t *widget_obj, struct battery_update
     }
 
     peripheral_battery[state.source] = state.level;
-    lv_arc_set_value(arc, state.level);
+    animate_arc_value(arc, state.level);
     update_battery_circle_colors(widget_obj, state.source);
 }
 
