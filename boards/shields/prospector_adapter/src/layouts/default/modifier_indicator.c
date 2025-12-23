@@ -12,15 +12,15 @@
 
 #include <fonts.h>
 #include <symbols.h>
+#ifdef CONFIG_PROSPECTOR_SHOW_MODIFIERS
+#include <modifier_order.h>
+#endif
 
 static sys_slist_t widgets = SYS_SLIST_STATIC_INIT(&widgets);
 
 struct modifier_state {
 #ifdef CONFIG_PROSPECTOR_SHOW_MODIFIERS
-    bool cmd;
-    bool opt;
-    bool ctrl;
-    bool shift;
+    bool mods[4];
 #endif
 #ifdef CONFIG_DT_HAS_ZMK_BEHAVIOR_CAPS_WORD_ENABLED
     bool caps_word;
@@ -45,20 +45,22 @@ static void modifier_update_cb(struct modifier_state state) {
     struct zmk_widget_modifier_indicator *widget;
     SYS_SLIST_FOR_EACH_CONTAINER(&widgets, widget, node) {
 #ifdef CONFIG_PROSPECTOR_SHOW_MODIFIERS
-        set_modifier_state(widget->cmd_label, state.cmd);
-        set_modifier_state(widget->opt_label, state.opt);
-        set_modifier_state(widget->ctrl_label, state.ctrl);
+        for (int i = 0; i < 4; i++) {
+            enum modifier_type type = modifier_order_get(i);
+            bool active = state.mods[type];
 #ifdef CONFIG_DT_HAS_ZMK_BEHAVIOR_CAPS_WORD_ENABLED
-        if (state.caps_word) {
-            lv_label_set_text(widget->shift_label, SYMBOL_SHIFT_FILLED);
-            set_modifier_state(widget->shift_label, true);
-        } else {
-            lv_label_set_text(widget->shift_label, SYMBOL_SHIFT);
-            set_modifier_state(widget->shift_label, state.shift);
-        }
-#else
-        set_modifier_state(widget->shift_label, state.shift);
+            if (type == MOD_TYPE_SHIFT) {
+                if (state.caps_word) {
+                    lv_label_set_text(widget->mod_labels[i], SYMBOL_SHIFT_FILLED);
+                    set_modifier_state(widget->mod_labels[i], true);
+                    continue;
+                } else {
+                    lv_label_set_text(widget->mod_labels[i], SYMBOL_SHIFT);
+                }
+            }
 #endif
+            set_modifier_state(widget->mod_labels[i], active);
+        }
 #else
 #ifdef CONFIG_DT_HAS_ZMK_BEHAVIOR_CAPS_WORD_ENABLED
         set_modifier_state(widget->shift_label, state.caps_word);
@@ -82,19 +84,16 @@ static struct modifier_state modifier_indicator_get_state(const zmk_event_t *eh)
         .caps_word = caps_word_active,
 #endif
 #ifdef CONFIG_PROSPECTOR_SHOW_MODIFIERS
-        .cmd = false,
-        .opt = false,
-        .ctrl = false,
-        .shift = false,
+        .mods = {false, false, false, false},
 #endif
     };
 
 #ifdef CONFIG_PROSPECTOR_SHOW_MODIFIERS
     zmk_mod_flags_t mods = zmk_hid_get_explicit_mods();
-    state.shift = (mods & (MOD_LSFT | MOD_RSFT)) != 0;
-    state.ctrl = (mods & (MOD_LCTL | MOD_RCTL)) != 0;
-    state.opt = (mods & (MOD_LALT | MOD_RALT)) != 0;
-    state.cmd = (mods & (MOD_LGUI | MOD_RGUI)) != 0;
+    state.mods[MOD_TYPE_GUI] = (mods & (MOD_LGUI | MOD_RGUI)) != 0;
+    state.mods[MOD_TYPE_ALT] = (mods & (MOD_LALT | MOD_RALT)) != 0;
+    state.mods[MOD_TYPE_CTRL] = (mods & (MOD_LCTL | MOD_RCTL)) != 0;
+    state.mods[MOD_TYPE_SHIFT] = (mods & (MOD_LSFT | MOD_RSFT)) != 0;
 #endif
 
     return state;
@@ -123,30 +122,18 @@ int zmk_widget_modifier_indicator_init(struct zmk_widget_modifier_indicator *wid
     lv_obj_set_style_pad_row(widget->obj, 8, LV_PART_MAIN);
 
 #ifdef CONFIG_PROSPECTOR_SHOW_MODIFIERS
-    widget->cmd_label = lv_label_create(widget->obj);
-    lv_label_set_text(widget->cmd_label, SYMBOL_COMMAND);
-    lv_obj_set_style_text_font(widget->cmd_label, &Symbols_Semibold_32, LV_PART_MAIN);
-    lv_obj_set_style_text_color(widget->cmd_label, lv_color_hex(0x101010), LV_PART_MAIN);
-
-    widget->opt_label = lv_label_create(widget->obj);
-    lv_label_set_text(widget->opt_label, SYMBOL_OPTION);
-    lv_obj_set_style_text_font(widget->opt_label, &Symbols_Semibold_32, LV_PART_MAIN);
-    lv_obj_set_style_text_color(widget->opt_label, lv_color_hex(0x101010), LV_PART_MAIN);
-
-    widget->ctrl_label = lv_label_create(widget->obj);
-    lv_label_set_text(widget->ctrl_label, SYMBOL_CONTROL);
-    lv_obj_set_style_text_font(widget->ctrl_label, &Symbols_Semibold_32, LV_PART_MAIN);
-    lv_obj_set_style_text_color(widget->ctrl_label, lv_color_hex(0x101010), LV_PART_MAIN);
-#endif
-
-    widget->shift_label = lv_label_create(widget->obj);
-#if defined(CONFIG_PROSPECTOR_SHOW_MODIFIERS)
-    lv_label_set_text(widget->shift_label, SYMBOL_SHIFT);
+    for (int i = 0; i < 4; i++) {
+        widget->mod_labels[i] = lv_label_create(widget->obj);
+        lv_label_set_text(widget->mod_labels[i], modifier_order_get_symbol(i));
+        lv_obj_set_style_text_font(widget->mod_labels[i], &Symbols_Semibold_32, LV_PART_MAIN);
+        lv_obj_set_style_text_color(widget->mod_labels[i], lv_color_hex(0x101010), LV_PART_MAIN);
+    }
 #else
+    widget->shift_label = lv_label_create(widget->obj);
     lv_label_set_text(widget->shift_label, SYMBOL_SHIFT_FILLED);
-#endif
     lv_obj_set_style_text_font(widget->shift_label, &Symbols_Semibold_32, LV_PART_MAIN);
     lv_obj_set_style_text_color(widget->shift_label, lv_color_hex(0x101010), LV_PART_MAIN);
+#endif
 
     sys_slist_append(&widgets, &widget->node);
 

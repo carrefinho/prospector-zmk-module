@@ -13,6 +13,10 @@ if(CONFIG_SHIELD_PROSPECTOR_ADAPTER)
   zephyr_library_sources(src/custom_status_screen.c)
   zephyr_library_sources(src/display_rotate_init.c)
 
+  if(CONFIG_PROSPECTOR_SHOW_MODIFIERS)
+    zephyr_library_sources(src/modifier_order.c)
+  endif()
+
   if(CONFIG_PROSPECTOR_STATUS_SCREEN_DEFAULT)
     file(GLOB layout_sources src/layouts/default/*.c)
     list(FILTER layout_sources EXCLUDE REGEX "status_screen\\.c$")

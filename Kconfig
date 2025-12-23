@@ -41,6 +41,15 @@ config PROSPECTOR_SHOW_INACTIVE_MODIFIERS
       When disabled, inactive modifiers are hidden completely.
       Only affects default and wind_map layouts.
 
+config PROSPECTOR_MODIFIER_ORDER
+    string "Modifier display order"
+    default "GACS"
+    depends on PROSPECTOR_SHOW_MODIFIERS
+    help
+      Order of modifier indicators. Use exactly 4 characters:
+      G=GUI/Cmd, A=Alt/Opt, C=Control, S=Shift.
+      Each character must appear exactly once.
+
 config PROSPECTOR_USE_AMBIENT_LIGHT_SENSOR
     bool "Use ambient light sensor for auto brightness"
     default y

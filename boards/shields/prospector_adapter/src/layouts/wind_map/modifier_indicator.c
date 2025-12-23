@@ -13,26 +13,21 @@
 
 #include <fonts.h>
 #include <symbols.h>
+#include <modifier_order.h>
 
 #define MODIFIER_GRID_COL 7
 #define MODIFIER_GRID_X (LINE_SEGMENTS_GRID_OFFSET + MODIFIER_GRID_COL * LINE_SEGMENTS_SPACING)
 #define MODIFIER_CENTER_OFFSET_X (MODIFIER_GRID_X - LINE_SEGMENTS_WIDTH / 2)
 
-#define MODIFIER_CMD_ROW 2
-#define MODIFIER_OPT_ROW 3
-#define MODIFIER_CTRL_ROW 4
-#define MODIFIER_SHIFT_ROW 5
-
 #define GRID_ROW_Y(row) (LINE_SEGMENTS_GRID_OFFSET + (row) * LINE_SEGMENTS_SPACING)
 #define MODIFIER_CENTER_OFFSET_Y(row) (GRID_ROW_Y(row) - LINE_SEGMENTS_HEIGHT / 2)
+
+static const int grid_rows[4] = {2, 3, 4, 5};
 
 static sys_slist_t widgets = SYS_SLIST_STATIC_INIT(&widgets);
 
 struct modifier_state {
-    bool cmd;
-    bool opt;
-    bool ctrl;
-    bool shift;
+    bool mods[4];
 #ifdef CONFIG_DT_HAS_ZMK_BEHAVIOR_CAPS_WORD_ENABLED
     bool caps_word;
 #endif
@@ -60,20 +55,22 @@ static void set_modifier_visible(lv_obj_t *label, int grid_row, bool active) {
 static void modifier_update_cb(struct modifier_state state) {
     struct zmk_widget_modifier_indicator *widget;
     SYS_SLIST_FOR_EACH_CONTAINER(&widgets, widget, node) {
-        set_modifier_visible(widget->cmd_label, MODIFIER_CMD_ROW, state.cmd);
-        set_modifier_visible(widget->opt_label, MODIFIER_OPT_ROW, state.opt);
-        set_modifier_visible(widget->ctrl_label, MODIFIER_CTRL_ROW, state.ctrl);
+        for (int i = 0; i < 4; i++) {
+            enum modifier_type type = modifier_order_get(i);
+            bool active = state.mods[type];
 #ifdef CONFIG_DT_HAS_ZMK_BEHAVIOR_CAPS_WORD_ENABLED
-        if (state.caps_word) {
-            lv_label_set_text(widget->shift_label, SYMBOL_SHIFT_FILLED);
-            set_modifier_visible(widget->shift_label, MODIFIER_SHIFT_ROW, true);
-        } else {
-            lv_label_set_text(widget->shift_label, SYMBOL_SHIFT);
-            set_modifier_visible(widget->shift_label, MODIFIER_SHIFT_ROW, state.shift);
-        }
-#else
-        set_modifier_visible(widget->shift_label, MODIFIER_SHIFT_ROW, state.shift);
+            if (type == MOD_TYPE_SHIFT) {
+                if (state.caps_word) {
+                    lv_label_set_text(widget->mod_labels[i], SYMBOL_SHIFT_FILLED);
+                    set_modifier_visible(widget->mod_labels[i], grid_rows[i], true);
+                    continue;
+                } else {
+                    lv_label_set_text(widget->mod_labels[i], SYMBOL_SHIFT);
+                }
+            }
 #endif
+            set_modifier_visible(widget->mod_labels[i], grid_rows[i], active);
+        }
     }
 }
 
@@ -88,20 +85,17 @@ static struct modifier_state modifier_indicator_get_state(const zmk_event_t *eh)
 #endif
 
     struct modifier_state state = {
+        .mods = {false, false, false, false},
 #ifdef CONFIG_DT_HAS_ZMK_BEHAVIOR_CAPS_WORD_ENABLED
         .caps_word = caps_word_active,
 #endif
-        .cmd = false,
-        .opt = false,
-        .ctrl = false,
-        .shift = false,
     };
 
     zmk_mod_flags_t mods = zmk_hid_get_explicit_mods();
-    state.shift = (mods & (MOD_LSFT | MOD_RSFT)) != 0;
-    state.ctrl = (mods & (MOD_LCTL | MOD_RCTL)) != 0;
-    state.opt = (mods & (MOD_LALT | MOD_RALT)) != 0;
-    state.cmd = (mods & (MOD_LGUI | MOD_RGUI)) != 0;
+    state.mods[MOD_TYPE_GUI] = (mods & (MOD_LGUI | MOD_RGUI)) != 0;
+    state.mods[MOD_TYPE_ALT] = (mods & (MOD_LALT | MOD_RALT)) != 0;
+    state.mods[MOD_TYPE_CTRL] = (mods & (MOD_LCTL | MOD_RCTL)) != 0;
+    state.mods[MOD_TYPE_SHIFT] = (mods & (MOD_LSFT | MOD_RSFT)) != 0;
 
     return state;
 }
@@ -146,23 +140,15 @@ int zmk_widget_modifier_indicator_init(struct zmk_widget_modifier_indicator *wid
     lv_obj_set_style_border_width(widget->obj, 0, LV_PART_MAIN);
     lv_obj_add_flag(widget->obj, LV_OBJ_FLAG_HIDDEN);
 
-    widget->cmd_container = create_modifier_container(parent, MODIFIER_CMD_ROW);
-    widget->cmd_label = create_modifier_label(widget->cmd_container, SYMBOL_COMMAND);
-
-    widget->opt_container = create_modifier_container(parent, MODIFIER_OPT_ROW);
-    widget->opt_label = create_modifier_label(widget->opt_container, SYMBOL_OPTION);
-
-    widget->ctrl_container = create_modifier_container(parent, MODIFIER_CTRL_ROW);
-    widget->ctrl_label = create_modifier_label(widget->ctrl_container, SYMBOL_CONTROL);
-
-    widget->shift_container = create_modifier_container(parent, MODIFIER_SHIFT_ROW);
-    widget->shift_label = create_modifier_label(widget->shift_container, SYMBOL_SHIFT);
+    for (int i = 0; i < 4; i++) {
+        widget->mod_containers[i] = create_modifier_container(parent, grid_rows[i]);
+        widget->mod_labels[i] = create_modifier_label(widget->mod_containers[i], modifier_order_get_symbol(i));
+    }
 
 #ifdef CONFIG_PROSPECTOR_SHOW_INACTIVE_MODIFIERS
-    zmk_widget_line_segments_set_cell_excluded(MODIFIER_GRID_COL, MODIFIER_CMD_ROW, true);
-    zmk_widget_line_segments_set_cell_excluded(MODIFIER_GRID_COL, MODIFIER_OPT_ROW, true);
-    zmk_widget_line_segments_set_cell_excluded(MODIFIER_GRID_COL, MODIFIER_CTRL_ROW, true);
-    zmk_widget_line_segments_set_cell_excluded(MODIFIER_GRID_COL, MODIFIER_SHIFT_ROW, true);
+    for (int i = 0; i < 4; i++) {
+        zmk_widget_line_segments_set_cell_excluded(MODIFIER_GRID_COL, grid_rows[i], true);
+    }
 #endif
 
     sys_slist_append(&widgets, &widget->node);

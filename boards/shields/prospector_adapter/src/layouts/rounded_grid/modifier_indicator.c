@@ -12,15 +12,13 @@
 
 #include <fonts.h>
 #include <symbols.h>
+#include <modifier_order.h>
 #include "display_colors.h"
 
 static sys_slist_t widgets = SYS_SLIST_STATIC_INIT(&widgets);
 
 struct modifier_indicator_state {
-    bool cmd;
-    bool opt;
-    bool ctrl;
-    bool shift;
+    bool mods[4];
 #ifdef CONFIG_DT_HAS_ZMK_BEHAVIOR_CAPS_WORD_ENABLED
     bool caps_word;
 #endif
@@ -39,20 +37,22 @@ static void set_modifier_color(lv_obj_t *label, bool active) {
 static void modifier_indicator_update_cb(struct modifier_indicator_state state) {
     struct zmk_widget_modifier_indicator *widget;
     SYS_SLIST_FOR_EACH_CONTAINER(&widgets, widget, node) {
-        set_modifier_color(widget->cmd_label, state.cmd);
-        set_modifier_color(widget->opt_label, state.opt);
-        set_modifier_color(widget->ctrl_label, state.ctrl);
+        for (int i = 0; i < 4; i++) {
+            enum modifier_type type = modifier_order_get(i);
+            bool active = state.mods[type];
 #ifdef CONFIG_DT_HAS_ZMK_BEHAVIOR_CAPS_WORD_ENABLED
-        if (state.caps_word) {
-            lv_label_set_text(widget->shift_label, SYMBOL_SHIFT_FILLED);
-            set_modifier_color(widget->shift_label, true);
-        } else {
-            lv_label_set_text(widget->shift_label, SYMBOL_SHIFT);
-            set_modifier_color(widget->shift_label, state.shift);
-        }
-#else
-        set_modifier_color(widget->shift_label, state.shift);
+            if (type == MOD_TYPE_SHIFT) {
+                if (state.caps_word) {
+                    lv_label_set_text(widget->mod_labels[i], SYMBOL_SHIFT_FILLED);
+                    set_modifier_color(widget->mod_labels[i], true);
+                    continue;
+                } else {
+                    lv_label_set_text(widget->mod_labels[i], SYMBOL_SHIFT);
+                }
+            }
 #endif
+            set_modifier_color(widget->mod_labels[i], active);
+        }
     }
 }
 
@@ -92,14 +92,16 @@ static struct modifier_indicator_state modifier_indicator_get_state(const zmk_ev
 #endif
 
     struct modifier_indicator_state state = {
-        .shift = (mods & (MOD_LSFT | MOD_RSFT)) != 0,
-        .ctrl = (mods & (MOD_LCTL | MOD_RCTL)) != 0,
-        .opt = (mods & (MOD_LALT | MOD_RALT)) != 0,
-        .cmd = (mods & (MOD_LGUI | MOD_RGUI)) != 0,
+        .mods = {false, false, false, false},
 #ifdef CONFIG_DT_HAS_ZMK_BEHAVIOR_CAPS_WORD_ENABLED
         .caps_word = caps_word_active,
 #endif
     };
+
+    state.mods[MOD_TYPE_GUI] = (mods & (MOD_LGUI | MOD_RGUI)) != 0;
+    state.mods[MOD_TYPE_ALT] = (mods & (MOD_LALT | MOD_RALT)) != 0;
+    state.mods[MOD_TYPE_CTRL] = (mods & (MOD_LCTL | MOD_RCTL)) != 0;
+    state.mods[MOD_TYPE_SHIFT] = (mods & (MOD_LSFT | MOD_RSFT)) != 0;
 
     return state;
 }
@@ -112,6 +114,10 @@ ZMK_SUBSCRIPTION(widget_modifier_indicator, zmk_keycode_state_changed);
 ZMK_SUBSCRIPTION(widget_modifier_indicator, zmk_caps_word_state_changed);
 #endif
 
+static const int32_t mod_positions[4][2] = {
+    {14, 27}, {50, 27}, {14, 64}, {50, 64}
+};
+
 int zmk_widget_modifier_indicator_init(struct zmk_widget_modifier_indicator *widget, lv_obj_t *parent) {
     widget->obj = lv_obj_create(parent);
     lv_obj_set_size(widget->obj, 108, 178);
@@ -121,29 +127,13 @@ int zmk_widget_modifier_indicator_init(struct zmk_widget_modifier_indicator *wid
     lv_obj_set_style_border_width(widget->obj, 0, LV_PART_MAIN);
     lv_obj_set_style_pad_all(widget->obj, 0, LV_PART_MAIN);
 
-    widget->cmd_label = lv_label_create(widget->obj);
-    lv_label_set_text(widget->cmd_label, SYMBOL_COMMAND);
-    lv_obj_set_style_text_font(widget->cmd_label, &Symbols_Semibold_32, LV_PART_MAIN);
-    lv_obj_set_style_text_color(widget->cmd_label, lv_color_hex(DISPLAY_COLOR_MOD_INACTIVE), LV_PART_MAIN);
-    lv_obj_set_pos(widget->cmd_label, 14, 27);
-
-    widget->opt_label = lv_label_create(widget->obj);
-    lv_label_set_text(widget->opt_label, SYMBOL_OPTION);
-    lv_obj_set_style_text_font(widget->opt_label, &Symbols_Semibold_32, LV_PART_MAIN);
-    lv_obj_set_style_text_color(widget->opt_label, lv_color_hex(DISPLAY_COLOR_MOD_INACTIVE), LV_PART_MAIN);
-    lv_obj_set_pos(widget->opt_label, 50, 27);
-
-    widget->ctrl_label = lv_label_create(widget->obj);
-    lv_label_set_text(widget->ctrl_label, SYMBOL_CONTROL);
-    lv_obj_set_style_text_font(widget->ctrl_label, &Symbols_Semibold_32, LV_PART_MAIN);
-    lv_obj_set_style_text_color(widget->ctrl_label, lv_color_hex(DISPLAY_COLOR_MOD_INACTIVE), LV_PART_MAIN);
-    lv_obj_set_pos(widget->ctrl_label, 14, 64);
-
-    widget->shift_label = lv_label_create(widget->obj);
-    lv_label_set_text(widget->shift_label, SYMBOL_SHIFT);
-    lv_obj_set_style_text_font(widget->shift_label, &Symbols_Semibold_32, LV_PART_MAIN);
-    lv_obj_set_style_text_color(widget->shift_label, lv_color_hex(DISPLAY_COLOR_MOD_INACTIVE), LV_PART_MAIN);
-    lv_obj_set_pos(widget->shift_label, 50, 64);
+    for (int i = 0; i < 4; i++) {
+        widget->mod_labels[i] = lv_label_create(widget->obj);
+        lv_label_set_text(widget->mod_labels[i], modifier_order_get_symbol(i));
+        lv_obj_set_style_text_font(widget->mod_labels[i], &Symbols_Semibold_32, LV_PART_MAIN);
+        lv_obj_set_style_text_color(widget->mod_labels[i], lv_color_hex(DISPLAY_COLOR_MOD_INACTIVE), LV_PART_MAIN);
+        lv_obj_set_pos(widget->mod_labels[i], mod_positions[i][0], mod_positions[i][1]);
+    }
 
     sys_slist_append(&widgets, &widget->node);
 

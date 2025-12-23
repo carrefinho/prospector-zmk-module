@@ -6,15 +6,13 @@
 #include <zmk/hid.h>
 
 #include <fonts.h>
+#include <modifier_order.h>
 #include "display_colors.h"
 
 static sys_slist_t widgets = SYS_SLIST_STATIC_INIT(&widgets);
 
 struct modifier_indicator_state {
-    bool shift;
-    bool ctrl;
-    bool alt;
-    bool gui;
+    bool mods[4];
 };
 
 static void set_modifier_color(lv_obj_t *label, bool active) {
@@ -26,10 +24,10 @@ static void set_modifier_color(lv_obj_t *label, bool active) {
 static void modifier_indicator_update_cb(struct modifier_indicator_state state) {
     struct zmk_widget_modifier_indicator *widget;
     SYS_SLIST_FOR_EACH_CONTAINER(&widgets, widget, node) {
-        set_modifier_color(widget->shift_label, state.shift);
-        set_modifier_color(widget->ctrl_label, state.ctrl);
-        set_modifier_color(widget->alt_label, state.alt);
-        set_modifier_color(widget->gui_label, state.gui);
+        for (int i = 0; i < 4; i++) {
+            enum modifier_type type = modifier_order_get(i);
+            set_modifier_color(widget->mod_labels[i], state.mods[type]);
+        }
     }
 }
 
@@ -37,11 +35,13 @@ static struct modifier_indicator_state modifier_indicator_get_state(const zmk_ev
     zmk_mod_flags_t mods = zmk_hid_get_explicit_mods();
 
     struct modifier_indicator_state state = {
-        .shift = (mods & (MOD_LSFT | MOD_RSFT)) != 0,
-        .ctrl = (mods & (MOD_LCTL | MOD_RCTL)) != 0,
-        .alt = (mods & (MOD_LALT | MOD_RALT)) != 0,
-        .gui = (mods & (MOD_LGUI | MOD_RGUI)) != 0,
+        .mods = {false, false, false, false},
     };
+
+    state.mods[MOD_TYPE_GUI] = (mods & (MOD_LGUI | MOD_RGUI)) != 0;
+    state.mods[MOD_TYPE_ALT] = (mods & (MOD_LALT | MOD_RALT)) != 0;
+    state.mods[MOD_TYPE_CTRL] = (mods & (MOD_LCTL | MOD_RCTL)) != 0;
+    state.mods[MOD_TYPE_SHIFT] = (mods & (MOD_LSFT | MOD_RSFT)) != 0;
 
     return state;
 }
@@ -79,13 +79,12 @@ int zmk_widget_modifier_indicator_init(struct zmk_widget_modifier_indicator *wid
     lv_obj_set_flex_flow(widget->obj, LV_FLEX_FLOW_ROW);
     lv_obj_set_flex_align(widget->obj, LV_FLEX_ALIGN_SPACE_BETWEEN, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
 
-    widget->shift_label = create_mod_label(widget->obj, "SHFT");
-    create_separator(widget->obj);
-    widget->ctrl_label = create_mod_label(widget->obj, "CTRL");
-    create_separator(widget->obj);
-    widget->alt_label = create_mod_label(widget->obj, "ALT");
-    create_separator(widget->obj);
-    widget->gui_label = create_mod_label(widget->obj, "GUI");
+    for (int i = 0; i < 4; i++) {
+        widget->mod_labels[i] = create_mod_label(widget->obj, modifier_order_get_text(i));
+        if (i < 3) {
+            create_separator(widget->obj);
+        }
+    }
 
     sys_slist_append(&widgets, &widget->node);
     widget_modifier_indicator_init();
