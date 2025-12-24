@@ -11,6 +11,7 @@ LV_FONT_DECLARE(Symbols_Semibold_32);
 LV_FONT_DECLARE(FG_Medium_20);
 LV_FONT_DECLARE(FR_Regular_48);
 LV_FONT_DECLARE(FR_Thin_48);
+LV_FONT_DECLARE(DINishCondensed_SemiBold_22);
 
 #elif defined(CONFIG_PROSPECTOR_STATUS_SCREEN_ROUNDED_GRID)
 
@@ -19,6 +20,7 @@ LV_FONT_DECLARE(Symbols_Semibold_28);
 LV_FONT_DECLARE(Symbols_Regular_28);
 LV_FONT_DECLARE(Symbols_Bold_26);
 LV_FONT_DECLARE(PPF_NarrowThin_64);
+LV_FONT_DECLARE(DINishCondensed_SemiBold_22);
 
 #elif defined(CONFIG_PROSPECTOR_STATUS_SCREEN_WIND_MAP)
 
@@ -26,6 +28,7 @@ LV_FONT_DECLARE(Symbols_Semibold_32);
 LV_FONT_DECLARE(Symbols_Regular_28);
 LV_FONT_DECLARE(FR_Regular_30);
 LV_FONT_DECLARE(FR_Regular_36);
+LV_FONT_DECLARE(DINishCondensed_SemiBold_20);
 
 #elif defined(CONFIG_PROSPECTOR_STATUS_SCREEN_OPERATOR)
 
@@ -33,5 +36,6 @@ LV_FONT_DECLARE(FG_Medium_20);
 LV_FONT_DECLARE(FR_Regular_36);
 LV_FONT_DECLARE(FR_Medium_32);
 LV_FONT_DECLARE(DINish_Medium_24);
+LV_FONT_DECLARE(Symbols_Semibold_28);
 
 #endif

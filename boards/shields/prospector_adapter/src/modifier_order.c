@@ -13,13 +13,23 @@ static enum modifier_type order[MOD_TYPE_COUNT] = {
     MOD_TYPE_GUI, MOD_TYPE_ALT, MOD_TYPE_CTRL, MOD_TYPE_SHIFT
 };
 
-static const char *symbols[MOD_TYPE_COUNT] = {
+static const char *symbols_mac[MOD_TYPE_COUNT] = {
     SYMBOL_COMMAND, SYMBOL_OPTION, SYMBOL_CONTROL, SYMBOL_SHIFT
 };
 
+#if defined(CONFIG_PROSPECTOR_MODIFIER_OS_MAC)
+static const char *texts[MOD_TYPE_COUNT] = {
+    "CMD", "OPT", "CTRL", "SHFT"
+};
+#elif defined(CONFIG_PROSPECTOR_MODIFIER_OS_WINDOWS)
+static const char *texts[MOD_TYPE_COUNT] = {
+    "WIN", "ALT", "CTRL", "SHFT"
+};
+#else
 static const char *texts[MOD_TYPE_COUNT] = {
     "GUI", "ALT", "CTRL", "SHFT"
 };
+#endif
 
 static enum modifier_type char_to_modifier(char ch) {
     switch (toupper((unsigned char)ch)) {
@@ -72,8 +82,24 @@ enum modifier_type modifier_order_get(int position) {
     return order[position];
 }
 
+bool modifier_order_uses_symbols(void) {
+#if defined(CONFIG_PROSPECTOR_MODIFIER_OS_MAC)
+    return true;
+#else
+    return false;
+#endif
+}
+
+bool modifier_order_is_windows(void) {
+#if defined(CONFIG_PROSPECTOR_MODIFIER_OS_WINDOWS)
+    return true;
+#else
+    return false;
+#endif
+}
+
 const char *modifier_order_get_symbol(int position) {
-    return symbols[modifier_order_get(position)];
+    return symbols_mac[modifier_order_get(position)];
 }
 
 const char *modifier_order_get_text(int position) {

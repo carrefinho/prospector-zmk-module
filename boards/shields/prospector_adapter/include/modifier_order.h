@@ -11,5 +11,7 @@ enum modifier_type {
 };
 
 enum modifier_type modifier_order_get(int position);
+bool modifier_order_uses_symbols(void);
+bool modifier_order_is_windows(void);
 const char *modifier_order_get_symbol(int position);
 const char *modifier_order_get_text(int position);

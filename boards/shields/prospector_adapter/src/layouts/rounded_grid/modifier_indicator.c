@@ -17,6 +17,10 @@
 
 static sys_slist_t widgets = SYS_SLIST_STATIC_INIT(&widgets);
 
+#define WIN_ICON_SIZE 32
+#define WIN_SQUARE_SIZE 14
+#define WIN_SQUARE_GAP 4
+
 struct modifier_indicator_state {
     bool mods[4];
 #ifdef CONFIG_DT_HAS_ZMK_BEHAVIOR_CAPS_WORD_ENABLED
@@ -28,30 +32,63 @@ struct modifier_indicator_state {
 static bool caps_word_active = false;
 #endif
 
-static void set_modifier_color(lv_obj_t *label, bool active) {
+static void set_modifier_color(lv_obj_t *obj, bool active, bool is_win_icon) {
     lv_color_t color = active ? lv_color_hex(DISPLAY_COLOR_MOD_ACTIVE)
                                : lv_color_hex(DISPLAY_COLOR_MOD_INACTIVE);
-    lv_obj_set_style_text_color(label, color, 0);
+    if (is_win_icon) {
+        for (uint32_t i = 0; i < lv_obj_get_child_count(obj); i++) {
+            lv_obj_set_style_bg_color(lv_obj_get_child(obj, i), color, LV_PART_MAIN);
+        }
+    } else {
+        lv_obj_set_style_text_color(obj, color, 0);
+    }
+}
+
+static lv_obj_t *create_win_icon(lv_obj_t *parent) {
+    lv_obj_t *container = lv_obj_create(parent);
+    lv_obj_set_size(container, WIN_ICON_SIZE, WIN_ICON_SIZE);
+    lv_obj_set_style_bg_opa(container, LV_OPA_TRANSP, LV_PART_MAIN);
+    lv_obj_set_style_border_width(container, 0, LV_PART_MAIN);
+    lv_obj_set_style_pad_all(container, 0, LV_PART_MAIN);
+
+    for (int row = 0; row < 2; row++) {
+        for (int col = 0; col < 2; col++) {
+            lv_obj_t *square = lv_obj_create(container);
+            lv_obj_set_size(square, WIN_SQUARE_SIZE, WIN_SQUARE_SIZE);
+            lv_obj_set_pos(square, col * (WIN_SQUARE_SIZE + WIN_SQUARE_GAP),
+                           row * (WIN_SQUARE_SIZE + WIN_SQUARE_GAP));
+            lv_obj_set_style_bg_color(square, lv_color_hex(DISPLAY_COLOR_MOD_INACTIVE), LV_PART_MAIN);
+            lv_obj_set_style_bg_opa(square, LV_OPA_COVER, LV_PART_MAIN);
+            lv_obj_set_style_border_width(square, 0, LV_PART_MAIN);
+            lv_obj_set_style_radius(square, 2, LV_PART_MAIN);
+            lv_obj_set_style_pad_all(square, 0, LV_PART_MAIN);
+        }
+    }
+    return container;
 }
 
 static void modifier_indicator_update_cb(struct modifier_indicator_state state) {
     struct zmk_widget_modifier_indicator *widget;
     SYS_SLIST_FOR_EACH_CONTAINER(&widgets, widget, node) {
+        bool is_windows = modifier_order_is_windows();
         for (int i = 0; i < 4; i++) {
             enum modifier_type type = modifier_order_get(i);
             bool active = state.mods[type];
+            bool is_win_icon = is_windows && type == MOD_TYPE_GUI;
 #ifdef CONFIG_DT_HAS_ZMK_BEHAVIOR_CAPS_WORD_ENABLED
             if (type == MOD_TYPE_SHIFT) {
                 if (state.caps_word) {
-                    lv_label_set_text(widget->mod_labels[i], SYMBOL_SHIFT_FILLED);
-                    set_modifier_color(widget->mod_labels[i], true);
+                    if (modifier_order_uses_symbols()) {
+                        lv_label_set_text(widget->mod_labels[i], SYMBOL_SHIFT_FILLED);
+                    }
+                    set_modifier_color(widget->mod_labels[i], true, false);
                     continue;
-                } else {
+                } else if (modifier_order_uses_symbols()) {
                     lv_label_set_text(widget->mod_labels[i], SYMBOL_SHIFT);
                 }
             }
 #endif
-            set_modifier_color(widget->mod_labels[i], active);
+            set_modifier_color(widget->mod_labels[i], active, is_win_icon);
         }
     }
 }
@@ -127,11 +164,23 @@ int zmk_widget_modifier_indicator_init(struct zmk_widget_modifier_indicator *wid
     lv_obj_set_style_border_width(widget->obj, 0, LV_PART_MAIN);
     lv_obj_set_style_pad_all(widget->obj, 0, LV_PART_MAIN);
 
+    bool use_symbols = modifier_order_uses_symbols();
+    bool is_windows = modifier_order_is_windows();
     for (int i = 0; i < 4; i++) {
-        widget->mod_labels[i] = lv_label_create(widget->obj);
-        lv_label_set_text(widget->mod_labels[i], modifier_order_get_symbol(i));
-        lv_obj_set_style_text_font(widget->mod_labels[i], &Symbols_Semibold_32, LV_PART_MAIN);
-        lv_obj_set_style_text_color(widget->mod_labels[i], lv_color_hex(DISPLAY_COLOR_MOD_INACTIVE), LV_PART_MAIN);
+        enum modifier_type type = modifier_order_get(i);
+        if (is_windows && type == MOD_TYPE_GUI) {
+            widget->mod_labels[i] = create_win_icon(widget->obj);
+        } else if (use_symbols) {
+            widget->mod_labels[i] = lv_label_create(widget->obj);
+            lv_label_set_text(widget->mod_labels[i], modifier_order_get_symbol(i));
+            lv_obj_set_style_text_font(widget->mod_labels[i], &Symbols_Semibold_32, LV_PART_MAIN);
+            lv_obj_set_style_text_color(widget->mod_labels[i], lv_color_hex(DISPLAY_COLOR_MOD_INACTIVE), LV_PART_MAIN);
+        } else {
+            widget->mod_labels[i] = lv_label_create(widget->obj);
+            lv_label_set_text(widget->mod_labels[i], modifier_order_get_text(i));
+            lv_obj_set_style_text_font(widget->mod_labels[i], &DINishCondensed_SemiBold_22, LV_PART_MAIN);
+            lv_obj_set_style_text_color(widget->mod_labels[i], lv_color_hex(DISPLAY_COLOR_MOD_INACTIVE), LV_PART_MAIN);
+        }
         lv_obj_set_pos(widget->mod_labels[i], mod_positions[i][0], mod_positions[i][1]);
     }
 

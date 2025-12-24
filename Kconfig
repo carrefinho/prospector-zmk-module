@@ -50,6 +50,22 @@ config PROSPECTOR_MODIFIER_ORDER
       G=GUI/Cmd, A=Alt/Opt, C=Control, S=Shift.
       Each character must appear exactly once.
 
+choice PROSPECTOR_MODIFIER_OS
+    prompt "Modifier key style"
+    default PROSPECTOR_MODIFIER_OS_MAC
+    depends on PROSPECTOR_SHOW_MODIFIERS
+
+config PROSPECTOR_MODIFIER_OS_GENERIC
+    bool "Generic (CTRL, ALT, GUI, SHFT)"
+
+config PROSPECTOR_MODIFIER_OS_WINDOWS
+    bool "Windows"
+
+config PROSPECTOR_MODIFIER_OS_MAC
+    bool "Mac"
+
+endchoice
+
 config PROSPECTOR_USE_AMBIENT_LIGHT_SENSOR
     bool "Use ambient light sensor for auto brightness"
     default y
