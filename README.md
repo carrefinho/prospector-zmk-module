@@ -2,6 +2,9 @@
 
 All the necessary stuff for [Prospector](https://github.com/carrefinho/prospector) to display things with ZMK. Currently functional albeit barebones.
 
+> [!IMPORTANT]
+> If you're looking for a ZMK Zephyr 4.1 update compatible version, there is a work-in-progress but functional [`core/zephyr-4-1` branch](https://github.com/carrefinho/prospector-zmk-module/tree/core/zephyr-4-1) available. Build with board `xiao_ble` instead of `seeeduino_xiao_ble`, no other changes needed.
+
 ## Features
 
 - Highest active layer roller
@@ -82,7 +85,7 @@ CONFIG_PROSPECTOR_DISPLAY_IDLE_TIMEOUT_MS=30000
 | `CONFIG_PROSPECTOR_USE_AMBIENT_LIGHT_SENSOR`      | Use ambient light sensor for auto brightness, set to `n` if building without one                              | y            |
 | `CONFIG_PROSPECTOR_FIXED_BRIGHTNESS`              | Set fixed display brightess when not using ambient light sensor           | 50 (1-100)   |
 | `CONFIG_PROSPECTOR_PROSPECTOR_ROTATE_DISPLAY_180` | Rotate the display 180 degrees                                            | n            |
-| `CONFIG_PROSPECTOR_LAYER_ROLLER_ALL_CAPS`         | Convert layer names to all caps                                           | n            |
+| `CONFIG_PROSPECTOR_LAYER_ROLLER_ALL_CAPS`         | Convert layer names to all caps                                               | n            |
 | `CONFIG_PROSPECTOR_DISPLAY_SLEEP_ENABLE`          | Turn off display and backlight on idle                                    | n            |
 | `CONFIG_PROSPECTOR_DISPLAY_IDLE_TIMEOUT_MS`       | Idle timeout before turning display off (ms)                              | 30000        |
 | `CONFIG_PROSPECTOR_DISPLAY_SLEEP_USE_PM`          | Use Zephyr PM to suspend display controller (requires `CONFIG_PM_DEVICE`) | n            |
