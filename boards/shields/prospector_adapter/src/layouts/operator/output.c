@@ -66,7 +66,7 @@ static void update_output_widget(struct zmk_widget_output *widget) {
     set_usb_btn_state(widget->usb_btn, is_usb);
     set_ble_btn_state(widget->ble_btn, !is_usb);
 
-    for (int i = 0; i < 4; i++) {
+    for (int i = 0; i < ZMK_BLE_PROFILE_COUNT; i++) {
         set_slot_active(widget->slots[i], (i == active_profile_index));
     }
 }
@@ -120,23 +120,25 @@ static lv_obj_t *create_toggle_btn(lv_obj_t *parent, const char *text, int x) {
     return btn;
 }
 
-static lv_obj_t *create_slot_btn(lv_obj_t *parent, int index, int x) {
+static lv_obj_t *create_slot_btn(lv_obj_t *parent, int index, int x, int width, bool show_number) {
     lv_obj_t *slot = lv_obj_create(parent);
-    lv_obj_set_size(slot, 27, 29);
+    lv_obj_set_size(slot, width, 29);
     lv_obj_set_pos(slot, x, 33);
     lv_obj_set_style_radius(slot, 6, LV_PART_MAIN);
     lv_obj_set_style_bg_opa(slot, LV_OPA_COVER, LV_PART_MAIN);
     lv_obj_set_style_border_width(slot, 0, LV_PART_MAIN);
     lv_obj_set_style_pad_all(slot, 0, LV_PART_MAIN);
 
-    lv_obj_t *label = lv_label_create(slot);
-    char text[2];
-    snprintf(text, sizeof(text), "%d", index + 1);
-    lv_label_set_text(label, text);
-    lv_obj_set_style_text_font(label, &FG_Medium_20, LV_PART_MAIN);
-    lv_obj_set_style_text_color(label, lv_color_hex(0x000000), LV_PART_MAIN);
-    lv_obj_center(label);
-    lv_obj_set_style_translate_y(label, 1, LV_PART_MAIN);
+    if (show_number) {
+        lv_obj_t *label = lv_label_create(slot);
+        char text[2];
+        snprintf(text, sizeof(text), "%d", index + 1);
+        lv_label_set_text(label, text);
+        lv_obj_set_style_text_font(label, &FG_Medium_20, LV_PART_MAIN);
+        lv_obj_set_style_text_color(label, lv_color_hex(0x000000), LV_PART_MAIN);
+        lv_obj_center(label);
+        lv_obj_set_style_translate_y(label, 1, LV_PART_MAIN);
+    }
 
     return slot;
 }
@@ -151,8 +153,13 @@ int zmk_widget_output_init(struct zmk_widget_output *widget, lv_obj_t *parent) {
     widget->usb_btn = create_toggle_btn(widget->obj, "USB", 0);
     widget->ble_btn = create_toggle_btn(widget->obj, "BLE", 58);
 
-    for (int i = 0; i < 4; i++) {
-        widget->slots[i] = create_slot_btn(widget->obj, i, i * 29);
+    int slot_spacing = 2;
+    int slot_width = (116 - (ZMK_BLE_PROFILE_COUNT - 1) * slot_spacing) / ZMK_BLE_PROFILE_COUNT;
+    bool show_numbers = (ZMK_BLE_PROFILE_COUNT <= 5);
+
+    for (int i = 0; i < ZMK_BLE_PROFILE_COUNT; i++) {
+        int x = i * (slot_width + slot_spacing);
+        widget->slots[i] = create_slot_btn(widget->obj, i, x, slot_width, show_numbers);
     }
 
     if (sys_slist_is_empty(&widgets)) {
