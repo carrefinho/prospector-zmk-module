@@ -1,19 +1,19 @@
 choice PROSPECTOR_STATUS_SCREEN_LAYOUT
     prompt "Status screen layout"
-    default PROSPECTOR_STATUS_SCREEN_DEFAULT
+    default PROSPECTOR_STATUS_SCREEN_CLASSIC
 
-config PROSPECTOR_STATUS_SCREEN_DEFAULT
-    bool "Default layout"
+config PROSPECTOR_STATUS_SCREEN_CLASSIC
+    bool "Classic layout"
     help
         Standard Prospector status screen
 
-config PROSPECTOR_STATUS_SCREEN_ROUNDED_GRID
-    bool "Rounded grid layout"
+config PROSPECTOR_STATUS_SCREEN_RADII
+    bool "Radii layout"
     help
         Colorful grid layout with rounded widgets
 
-config PROSPECTOR_STATUS_SCREEN_WIND_MAP
-    bool "Wind map layout"
+config PROSPECTOR_STATUS_SCREEN_FIELD
+    bool "Field layout"
     help
         Status screen centered around wind map style WPM visualization
 
@@ -39,7 +39,7 @@ config PROSPECTOR_SHOW_INACTIVE_MODIFIERS
     help
       When enabled, inactive modifiers are shown with a dim color.
       When disabled, inactive modifiers are hidden completely.
-      Only affects default and wind_map layouts.
+      Only affects classic and field layouts.
 
 config PROSPECTOR_MODIFIER_ORDER
     string "Modifier display order"
