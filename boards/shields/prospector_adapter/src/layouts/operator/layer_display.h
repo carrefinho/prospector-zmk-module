@@ -2,8 +2,9 @@
 
 #include <lvgl.h>
 #include <zephyr/kernel.h>
+#include <zmk/keymap.h>
 
-#define LAYER_DOT_COUNT 7
+#define LAYER_DOT_COUNT ZMK_KEYMAP_LAYERS_LEN
 
 struct zmk_widget_layer_display {
     sys_snode_t node;
