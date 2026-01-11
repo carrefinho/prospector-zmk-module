@@ -1,6 +1,7 @@
 #include "wpm_meter.h"
 
 #include <zephyr/kernel.h>
+#include <ctype.h>
 #include <zmk/display.h>
 #include <zmk/events/wpm_state_changed.h>
 #include <zmk/events/layer_state_changed.h>
@@ -131,6 +132,13 @@ static void layer_update_cb(struct layer_state state) {
         } else {
             snprintf(display_name, sizeof(display_name), "Layer %d", state.index);
         }
+
+#if IS_ENABLED(CONFIG_PROSPECTOR_LAYER_NAME_UPPERCASE)
+        for (int i = 0; display_name[i]; i++) {
+            display_name[i] = toupper((unsigned char)display_name[i]);
+        }
+#endif
+
         lv_label_set_text(widget->layer_label, display_name);
     }
 }

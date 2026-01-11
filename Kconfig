@@ -75,3 +75,9 @@ config PROSPECTOR_FIXED_BRIGHTNESS
     default 50
     range 1 100
     depends on !PROSPECTOR_USE_AMBIENT_LIGHT_SENSOR
+
+config PROSPECTOR_LAYER_NAME_UPPERCASE
+    bool "Display layer names in uppercase"
+    default y
+    help
+      When enabled, layer names will be converted to uppercase for display.

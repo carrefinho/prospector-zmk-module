@@ -1,6 +1,7 @@
 #include "layer_indicator.h"
 
 #include <math.h>
+#include <ctype.h>
 #include <zmk/display.h>
 #include <zmk/events/layer_state_changed.h>
 #include <zmk/event_manager.h>
@@ -59,6 +60,12 @@ static void layer_indicator_set_sel(struct zmk_widget_layer_indicator *widget, s
     } else {
         snprintf(display_name, sizeof(display_name), "%d", state.index);
     }
+
+#if IS_ENABLED(CONFIG_PROSPECTOR_LAYER_NAME_UPPERCASE)
+    for (int i = 0; display_name[i]; i++) {
+        display_name[i] = toupper((unsigned char)display_name[i]);
+    }
+#endif
 
     lv_label_set_text(widget->obj, display_name);
 }
