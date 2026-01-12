@@ -211,3 +211,25 @@ int zmk_widget_battery_bar_init(struct zmk_widget_battery_bar *widget, lv_obj_t 
 }
 
 lv_obj_t *zmk_widget_battery_bar_obj(struct zmk_widget_battery_bar *widget) { return widget->obj; }
+
+static void set_battery_bar_width(void *obj, int32_t width) {
+    lv_obj_set_width(obj, width);
+}
+
+void zmk_widget_battery_bar_set_compact(bool compact) {
+    struct zmk_widget_battery_bar *widget;
+    SYS_SLIST_FOR_EACH_CONTAINER(&widgets, widget, node) {
+        lv_anim_t a;
+        lv_anim_init(&a);
+        lv_anim_set_var(&a, widget->obj);
+        lv_anim_set_exec_cb(&a, set_battery_bar_width);
+        lv_anim_set_time(&a, 200);
+        lv_anim_set_path_cb(&a, lv_anim_path_ease_out);
+
+        int32_t current_width = lv_obj_get_width(widget->obj);
+        int32_t target_width = compact ? 227 : 280;
+
+        lv_anim_set_values(&a, current_width, target_width);
+        lv_anim_start(&a);
+    }
+}
