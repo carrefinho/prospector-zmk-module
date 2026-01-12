@@ -25,8 +25,10 @@ LV_FONT_DECLARE(DINishCondensed_SemiBold_22);
 
 LV_FONT_DECLARE(Symbols_Semibold_32);
 LV_FONT_DECLARE(Symbols_Regular_28);
+LV_FONT_DECLARE(Symbols_Bold_26);
 LV_FONT_DECLARE(FR_Regular_30);
 LV_FONT_DECLARE(FR_Regular_36);
+LV_FONT_DECLARE(FG_Medium_26);
 LV_FONT_DECLARE(DINishCondensed_SemiBold_20);
 
 #elif defined(CONFIG_PROSPECTOR_STATUS_SCREEN_OPERATOR)
