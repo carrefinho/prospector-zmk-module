@@ -42,14 +42,14 @@ static enum modifier_type char_to_modifier(char ch) {
 }
 
 static bool parse_modifier_order(const char *order_str) {
-    if (!order_str || strlen(order_str) != 4) {
+    if (!order_str || strlen(order_str) != MOD_TYPE_COUNT) {
         return false;
     }
 
     bool seen[MOD_TYPE_COUNT] = {false, false, false, false};
     enum modifier_type temp[MOD_TYPE_COUNT];
 
-    for (int i = 0; i < 4; i++) {
+    for (int i = 0; i < MOD_TYPE_COUNT; i++) {
         enum modifier_type type = char_to_modifier(order_str[i]);
         if (type >= MOD_TYPE_COUNT || seen[type]) {
             return false;
@@ -77,25 +77,18 @@ SYS_INIT(modifier_order_init, APPLICATION, CONFIG_APPLICATION_INIT_PRIORITY);
 
 enum modifier_type modifier_order_get(int position) {
     if (position < 0 || position >= MOD_TYPE_COUNT) {
+        LOG_WRN("Invalid modifier position %d", position);
         return MOD_TYPE_GUI;
     }
     return order[position];
 }
 
 bool modifier_order_uses_symbols(void) {
-#if defined(CONFIG_PROSPECTOR_MODIFIER_OS_MAC)
-    return true;
-#else
-    return false;
-#endif
+    return IS_ENABLED(CONFIG_PROSPECTOR_MODIFIER_OS_MAC);
 }
 
 bool modifier_order_is_windows(void) {
-#if defined(CONFIG_PROSPECTOR_MODIFIER_OS_WINDOWS)
-    return true;
-#else
-    return false;
-#endif
+    return IS_ENABLED(CONFIG_PROSPECTOR_MODIFIER_OS_WINDOWS);
 }
 
 const char *modifier_order_get_symbol(int position) {
