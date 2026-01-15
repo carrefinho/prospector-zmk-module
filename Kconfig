@@ -15,12 +15,12 @@ config PROSPECTOR_STATUS_SCREEN_RADII
 config PROSPECTOR_STATUS_SCREEN_FIELD
     bool "Field layout"
     help
-        Status screen centered around wind map style WPM visualization
+        Minimal layout with flowing typing activity visualization
 
 config PROSPECTOR_STATUS_SCREEN_OPERATOR
     bool "Operator layout"
     help
-        HUD-style status screen with WPM bar graph, modifiers, and profile slots
+        Technical and information dense layout
 
 endchoice
 
