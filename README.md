@@ -101,7 +101,7 @@ CONFIG_PROSPECTOR_FIXED_BRIGHTNESS=80
 | ---- | ----------- | ------- |
 | `CONFIG_PROSPECTOR_SHOW_MODIFIERS` | Display modifier key indicators | y |
 | `CONFIG_PROSPECTOR_SHOW_INACTIVE_MODIFIERS` | Show inactive modifiers dimmed (Classic and Field only) | y |
-| `CONFIG_PROSPECTOR_MODIFIER_ORDER` | Order of modifiers: G=GUI, A=Alt, C=Ctrl, S=Shift | GACS |
+| `CONFIG_PROSPECTOR_MODIFIER_ORDER` | Order of modifiers: G=GUI, A=Alt, C=Ctrl, S=Shift | "GACS" |
 
 ### Field-specific
 | Name | Description | Default |
