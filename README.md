@@ -113,6 +113,7 @@ CONFIG_PROSPECTOR_FIXED_BRIGHTNESS=80
 ## Known Issues
 
 - One peripheral may fail to register key presses after connecting to the dongle; reset the affected peripheral to fix. https://github.com/zmkfirmware/zmk/issues/3156
+- Operator, Radii: battery display only supports up to three peripherals
 
 ## To-Do
 
