@@ -120,3 +120,4 @@ CONFIG_PROSPECTOR_FIXED_BRIGHTNESS=80
 - Operator: per-profile BLE status
 - Radii: document and improve color theme customization
 - OS-specific modifier styles
+- Caps lock indication
