@@ -7,6 +7,17 @@ This is a [ZMK module](https://zmk.dev/docs/features/modules) that provides cust
 > [!IMPORTANT]
 > This branch is a work-in-progress and is only compatible with the Zephyr 4.1 version of ZMK (current main).
 
+## Table of Contents
+
+- [Features](#features)
+- [Installation](#installation)
+- [Status Screens](#status-screens)
+- [Usage](#usage)
+- [Configuration](#configuration)
+- [Troubleshooting](#troubleshooting)
+- [Known Issues](#known-issues)
+- [To-Do](#to-do)
+
 ## Features
 
 - Four status screen layouts to choose from
