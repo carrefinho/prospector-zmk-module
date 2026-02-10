@@ -10,6 +10,8 @@ LOG_MODULE_DECLARE(zmk, CONFIG_ZMK_LOG_LEVEL);
 #include <zmk/event_manager.h>
 #include <zmk/events/wpm_state_changed.h>
 #include <zephyr/kernel.h>
+#include <zephyr/device.h>
+#include <zephyr/drivers/display.h>
 
 #ifndef M_PI
 #define M_PI 3.14159265358979323846f
@@ -99,7 +101,7 @@ static inline float fast_cos(float x) {
 }
 
 static inline float clampf(float val, float min_val, float max_val) {
-    if (val < min_val) return min_val;
+    if (!(val >= min_val)) return min_val;  // Also catches NaN
     if (val > max_val) return max_val;
     return val;
 }
@@ -140,6 +142,11 @@ static inline decay_param_t compute_decay_param(
     }
 
     result.current_value += (result.target_value - result.current_value) * rate;
+
+    // Guard against NaN/Inf propagation from float math
+    if (!isfinite(result.current_value)) result.current_value = 0.0f;
+    if (!isfinite(result.at_stop_value)) result.at_stop_value = 0.0f;
+
     return result;
 }
 
@@ -238,7 +245,7 @@ static void update_label_excluded_cells(void) {
 static void label_size_changed_cb(lv_event_t *e) {
     update_label_excluded_cells();
 
-    // Invalidate widget to redraw with new exclusions
+    // Invalidate widgets to redraw with new exclusions
     struct zmk_widget_line_segments *widget;
     SYS_SLIST_FOR_EACH_CONTAINER(&widgets, widget, node) {
         lv_obj_invalidate(widget->obj);
@@ -268,6 +275,12 @@ static void lines_update(void) {
     }
 
     idle_wobble_time += ANIM_IDLE_WOBBLE_SPEED * delta_time * 60.0f;
+
+    // Prevent float precision loss on long-running devices by wrapping time values.
+    // The noise/sine functions use these as phase inputs, so wrapping at a large
+    // value is transparent (brief visual discontinuity every ~5 days at idle rate).
+    if (lines_time > 100000.0f) lines_time -= 100000.0f;
+    if (idle_wobble_time > 100000.0f) idle_wobble_time -= 100000.0f;
 
     decay_param_t flow_state = {flow, flow_at_stop, 0};
     flow_state = compute_decay_param(flow_state, current_wpm, idle_ms, FLOW_DECAY_MS);
@@ -318,6 +331,31 @@ static void lines_update(void) {
             }
     }
 
+    // Global state validation and recovery: if any value is non-finite, reset all animation state
+    bool invalid_state = false;
+    for (int i = 0; i < GRID_COLS * GRID_ROWS; i++) {
+        if (!isfinite(smoothed_angles[i]) || !isfinite(line_length_scale[i]) ||
+            (line_opacity[i] < 0 || line_opacity[i] > 255)) {
+            invalid_state = true;
+            break;
+        }
+    }
+    if (invalid_state) {
+        for (int row = 0; row < GRID_ROWS; row++) {
+            for (int col = 0; col < GRID_COLS; col++) {
+                int line_idx = row * GRID_COLS + col;
+                smoothed_angles[line_idx] = -M_PI_4;
+                line_length_scale[line_idx] = LENGTH_BASE_IDLE;
+                line_opacity[line_idx] = (lv_opa_t)(OPACITY_BASE_IDLE * 255.0f);
+                line_endpoint_idx[line_idx] = angle_to_index(-M_PI_4);
+            }
+        }
+        flow = 0.0f;
+        intensity = 0.0f;
+        lines_time = 0.0f;
+        idle_wobble_time = 0.0f;
+    }
+
     uint32_t elapsed = k_cycle_get_32() - start;
     perf_update_us = k_cyc_to_us_floor32(elapsed);
 }
@@ -332,6 +370,12 @@ static void draw_cb(lv_event_t *e) {
 
     int32_t obj_x1 = obj_coords.x1;
     int32_t obj_y1 = obj_coords.y1;
+
+    // Skip drawing if widget is not properly positioned yet (all coords at 0)
+    // This prevents drawing garbage during initial layout phase
+    if (obj_x1 == 0 && obj_y1 == 0 && obj_coords.x2 == 0 && obj_coords.y2 == 0) {
+        return;
+    }
 
     uint64_t excluded = label_excluded_cells | modifier_excluded_cells;
 
@@ -381,6 +425,8 @@ static void draw_cb(lv_event_t *e) {
 }
 
 static void timer_cb(lv_timer_t *timer) {
+    static uint32_t keepalive_counter = 0;
+
     uint32_t now = k_uptime_get_32();
     uint32_t idle_ms = now - last_keypress_time;
 
@@ -400,9 +446,23 @@ static void timer_cb(lv_timer_t *timer) {
 
     lines_update();
 
+    // Invalidate all widgets to trigger redraw with updated line state.
+    // timer_cb runs within lv_task_handler(), so LVGL calls are safe here.
     struct zmk_widget_line_segments *widget;
     SYS_SLIST_FOR_EACH_CONTAINER(&widgets, widget, node) {
         lv_obj_invalidate(widget->obj);
+    }
+
+    // Display keep-alive: periodically re-assert display-on to guard against
+    // the ST7789V silently entering DISP_OFF or SLEEP_IN due to SPI glitches.
+    // Runs infrequently (~5 min at idle) to avoid visible flicker from DISPON.
+    keepalive_counter++;
+    if (keepalive_counter >= 600) {  // ~5min at idle (500ms), ~20s at 30Hz
+        keepalive_counter = 0;
+        const struct device *disp = DEVICE_DT_GET(DT_CHOSEN(zephyr_display));
+        if (device_is_ready(disp)) {
+            display_blanking_off(disp);
+        }
     }
 }
 
