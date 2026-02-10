@@ -29,6 +29,7 @@ static uint8_t active_profile_index = 0;
 static enum zmk_transport active_transport = ZMK_TRANSPORT_USB;
 static bool output_visible = false;
 
+// set_output_visible must only be called from the display work queue thread
 static void set_output_visible(bool visible) {
     output_visible = visible;
 
@@ -45,6 +46,7 @@ static void set_output_visible(bool visible) {
     }
 }
 
+// Runs on the display work queue — safe for LVGL calls
 static void profile_display_timeout_handler(struct k_work *work) {
     if (active_transport != ZMK_TRANSPORT_BLE) {
         set_output_visible(false);
@@ -114,28 +116,51 @@ static void update_output_widget(struct zmk_widget_output *widget, uint8_t profi
     lv_obj_invalidate(widget->container);
 }
 
+// Runs on display work queue — handles endpoint change LVGL updates
+static void endpoint_change_work_handler(struct k_work *work) {
+    if (active_transport == ZMK_TRANSPORT_BLE) {
+        k_work_cancel_delayable(&profile_display_timeout_work);
+        if (!output_visible) {
+            set_output_visible(true);
+        }
+    } else {
+        if (!output_visible) {
+            set_output_visible(true);
+        }
+        k_work_reschedule_for_queue(zmk_display_work_q(),
+                                    &profile_display_timeout_work,
+                                    PROFILE_DISPLAY_TIMEOUT);
+    }
+
+    struct zmk_widget_output *widget;
+    SYS_SLIST_FOR_EACH_CONTAINER(&widgets, widget, node) {
+        update_output_widget(widget, active_profile_index);
+    }
+}
+
+static K_WORK_DEFINE(endpoint_change_work, endpoint_change_work_handler);
+
+// Runs on display work queue — handles profile change LVGL updates
+static void profile_change_work_handler(struct k_work *work) {
+    set_output_visible(true);
+    k_work_reschedule_for_queue(zmk_display_work_q(),
+                                &profile_display_timeout_work,
+                                PROFILE_DISPLAY_TIMEOUT);
+
+    struct zmk_widget_output *widget;
+    SYS_SLIST_FOR_EACH_CONTAINER(&widgets, widget, node) {
+        update_output_widget(widget, active_profile_index);
+    }
+}
+
+static K_WORK_DEFINE(profile_change_work, profile_change_work_handler);
+
 static int endpoint_changed_listener(const zmk_event_t *eh) {
     const struct zmk_endpoint_changed *event = as_zmk_endpoint_changed(eh);
     if (event) {
         struct zmk_endpoint_instance selected = zmk_endpoints_selected();
         active_transport = selected.transport;
-
-        if (active_transport == ZMK_TRANSPORT_BLE) {
-            k_work_cancel_delayable(&profile_display_timeout_work);
-            if (!output_visible) {
-                set_output_visible(true);
-            }
-        } else {
-            if (!output_visible) {
-                set_output_visible(true);
-            }
-            k_work_reschedule(&profile_display_timeout_work, PROFILE_DISPLAY_TIMEOUT);
-        }
-
-        struct zmk_widget_output *widget;
-        SYS_SLIST_FOR_EACH_CONTAINER(&widgets, widget, node) {
-            update_output_widget(widget, active_profile_index);
-        }
+        k_work_submit_to_queue(zmk_display_work_q(), &endpoint_change_work);
     }
     return ZMK_EV_EVENT_BUBBLE;
 }
@@ -144,14 +169,7 @@ static int ble_active_profile_changed_listener(const zmk_event_t *eh) {
     const struct zmk_ble_active_profile_changed *event = as_zmk_ble_active_profile_changed(eh);
     if (event) {
         active_profile_index = event->index;
-
-        set_output_visible(true);
-        k_work_reschedule(&profile_display_timeout_work, PROFILE_DISPLAY_TIMEOUT);
-
-        struct zmk_widget_output *widget;
-        SYS_SLIST_FOR_EACH_CONTAINER(&widgets, widget, node) {
-            update_output_widget(widget, active_profile_index);
-        }
+        k_work_submit_to_queue(zmk_display_work_q(), &profile_change_work);
     }
     return ZMK_EV_EVENT_BUBBLE;
 }
