@@ -100,7 +100,7 @@ static void update_output_widget(struct zmk_widget_output *widget, uint8_t profi
 static int endpoint_changed_listener(const zmk_event_t *eh) {
     const struct zmk_endpoint_changed *event = as_zmk_endpoint_changed(eh);
     if (event) {
-        struct zmk_endpoint_instance selected = zmk_endpoints_selected();
+        struct zmk_endpoint_instance selected = zmk_endpoint_get_selected();
         active_transport = selected.transport;
 
         if (active_transport == ZMK_TRANSPORT_BLE) {
@@ -165,7 +165,7 @@ int zmk_widget_output_init(struct zmk_widget_output *widget, lv_obj_t *parent) {
 
     if (sys_slist_is_empty(&widgets)) {
         active_profile_index = zmk_ble_active_profile_index();
-        struct zmk_endpoint_instance selected = zmk_endpoints_selected();
+        struct zmk_endpoint_instance selected = zmk_endpoint_get_selected();
         active_transport = selected.transport;
 
         if (active_transport == ZMK_TRANSPORT_BLE) {
