@@ -57,9 +57,12 @@ Then add the `prospector_adapter` shield to the dongle in your `build.yaml`:
 ```yaml
 ---
 include:
-  - board: xiao_ble
+  - board: xiao_ble//zmk
     shield: [YOUR KEYBOARD SHIELD]_dongle prospector_adapter
 ```
+
+> [!NOTE]
+> Use the `//zmk` board variant (e.g., `xiao_ble//zmk`) for proper Bluetooth support with ZMK's HWMv2 board extensions.
 
 For more information on ZMK Modules and building locally, see [the ZMK docs page on modules.](https://zmk.dev/docs/features/modules)
 
