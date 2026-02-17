@@ -61,6 +61,9 @@ include:
     shield: [YOUR KEYBOARD SHIELD]_dongle prospector_adapter
 ```
 
+> [!NOTE]
+> Use the `//zmk` board variant (e.g., `xiao_ble//zmk`) for proper Bluetooth support with ZMK's HWMv2 board extensions.
+
 For more information on ZMK Modules and building locally, see [the ZMK docs page on modules.](https://zmk.dev/docs/features/modules)
 
 ## Status Screens
