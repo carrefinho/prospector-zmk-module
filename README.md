@@ -3,7 +3,7 @@
 All the necessary stuff for [Prospector](https://github.com/carrefinho/prospector) to display things with ZMK. Currently functional albeit barebones.
 
 > [!IMPORTANT]
-> This branch targets ZMK v0.3 and older (Zephyr 3.5). For ZMK main (Zephyr 4.1), see the [`core/zephyr-4-1` branch](https://github.com/carrefinho/prospector-zmk-module/tree/core/zephyr-4-1) or [`feat/new-status-screens` branch](https://github.com/carrefinho/prospector-zmk-module/tree/feat/new-status-screens) (new layouts, work-in-progress). Build with board `xiao_ble` instead of `seeeduino_xiao_ble`.
+> This branch targets ZMK v0.3 and older (Zephyr 3.5). For ZMK main (Zephyr 4.1), see the [`feat/new-status-screens` branch](https://github.com/carrefinho/prospector-zmk-module/tree/feat/new-status-screens) (Zephyr 4.1 compatible, including new status screens, work-in-progress). Build with board `xiao_ble//zmk` instead of `seeeduino_xiao_ble`.
 
 ## Features
 
@@ -28,7 +28,7 @@ manifest:
   projects:
     - name: zmk
       remote: zmkfirmware
-      revision: v0.3                              # <--- v0.3 only            
+      revision: v0.3                              # <--- v0.3 only
       import: app/west.yml
     - name: prospector-zmk-module                 # <--- and these
       remote: carrefinho                          # <---
