@@ -57,7 +57,7 @@ Then add the `prospector_adapter` shield to the dongle in your `build.yaml`:
 ```yaml
 ---
 include:
-  - board: xiao_ble
+  - board: xiao_ble//zmk
     shield: [YOUR KEYBOARD SHIELD]_dongle prospector_adapter
 ```
 
